@@ -1,4 +1,4 @@
-yamlname: Compilar .exe Windows
+name: Build
 
 on:
   push:
