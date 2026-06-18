@@ -9,7 +9,7 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Baixar o código
+      - name: Baixar o codigo
         uses: actions/checkout@v4
 
       - name: Instalar Node.js
@@ -17,10 +17,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Instalar dependências
+      - name: Instalar dependencias
         run: npm install
 
-      - name: Compilar o .exe
+      - name: Compilar o exe
         run: npm run build
 
       - name: Publicar o instalador
@@ -28,4 +28,3 @@ jobs:
         with:
           name: GBA-Emulator-Windows
           path: dist/*.exe
-
