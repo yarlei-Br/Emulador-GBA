@@ -1,0 +1,31 @@
+yamlname: Compilar .exe Windows
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v4
+
+      - name: Instalar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Instalar dependências
+        run: npm install
+
+      - name: Compilar o .exe
+        run: npm run build
+
+      - name: Publicar o instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: GBA-Emulator-Windows
+          path: dist/*.exe
+
