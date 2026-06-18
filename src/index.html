@@ -1,0 +1,1868 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>GBA Emulator - Ultimate Edition</title>
+<style>
+/* ── Reset & tokens ─────────────────────────────────────────────────────── */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg:        #0c0c10;
+  --surface:   #16161e;
+  --surface2:  #1e1e28;
+  --surface3:  #262634;
+  --border:    rgba(255,255,255,0.07);
+  --border2:   rgba(255,255,255,0.13);
+  --accent:    #8b6fd4;
+  --accent-lo: rgba(139,111,212,0.15);
+  --accent-hi: #b49aea;
+  --text:      #dddde8;
+  --muted:     #5e5e72;
+  --muted2:    #8888a0;
+  --success:   #34c07a;
+  --danger:    #e05555;
+  --warning:   #e0a055;
+  --screen-bg: #08080e;
+  --radius:    10px;
+  --radius-lg: 16px;
+  --ease:      cubic-bezier(.22,.68,0,1.2);
+}
+body.light {
+  --bg: #f0f0f0;
+  --surface: #ffffff;
+  --surface2: #f5f5f5;
+  --surface3: #e8e8e8;
+  --border: rgba(0,0,0,0.1);
+  --border2: rgba(0,0,0,0.15);
+  --text: #1a1a2e;
+  --muted: #666;
+  --muted2: #888;
+  --screen-bg: #000;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-x: hidden;
+  transition: background 0.3s, color 0.3s;
+}
+body.fullscreen-mode header,
+body.fullscreen-mode .toolbar,
+body.fullscreen-mode .touch-zone,
+body.fullscreen-mode .shortcuts-hint {
+  display: none !important;
+}
+body.fullscreen-mode main { padding: 0; max-width: 100%; }
+body.fullscreen-mode .emu-card { border-radius: 0; }
+body.fullscreen-mode #screen-area { height: 100vh; aspect-ratio: auto; }
+
+/* ── Header ── */
+header {
+  width: 100%;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  background: var(--surface);
+  border-bottom: 0.5px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.logo-mark {
+  width: 28px; height: 17px;
+  background: var(--accent);
+  border-radius: 4px;
+  position: relative;
+}
+.logo-mark::after {
+  content: '';
+  position: absolute;
+  left: 50%; top: 50%;
+  transform: translate(-50%, -50%);
+  width: 11px; height: 7px;
+  background: var(--screen-bg);
+  border-radius: 2px;
+}
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+}
+.pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: var(--surface2);
+  border: 0.5px solid var(--border);
+  font-size: 11px;
+}
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); }
+.dot.on { background: var(--success); }
+
+/* ── Main layout ── */
+main {
+  width: 100%;
+  max-width: 1200px;
+  padding: 1.5rem 1.25rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  transition: padding 0.3s;
+}
+
+/* ── Emulator card ── */
+.emu-card {
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.toolbar {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--surface2);
+  border-bottom: 0.5px solid var(--border);
+  flex-wrap: wrap;
+  overflow-x: auto;
+}
+.tb-btn {
+  height: 28px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  background: transparent;
+  border: 0.5px solid var(--border2);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: background .15s;
+  white-space: nowrap;
+}
+.tb-btn:hover { background: var(--surface3); }
+.tb-btn:active { transform: scale(0.97); }
+.tb-btn:disabled { opacity: 0.3; pointer-events: none; }
+.tb-btn.accent { background: var(--accent); border-color: var(--accent); }
+.tb-btn.accent:hover { background: var(--accent-hi); }
+.tb-btn.red { color: var(--danger); border-color: rgba(224,85,85,0.4); }
+.tb-sep { width: 0.5px; height: 18px; background: var(--border2); margin: 0 2px; }
+.tb-spacer { flex: 1; }
+
+/* Screen area */
+#screen-area {
+  width: 100%;
+  aspect-ratio: 3/2;
+  background: var(--screen-bg);
+  position: relative;
+  overflow: hidden;
+  min-width: 200px;
+  min-height: 150px;
+  transition: all 0.2s;
+}
+#screen-area.resizable { overflow: auto; resize: both; }
+
+/* Proporções de tela */
+.screen-ratio-1x1 #screen-area { aspect-ratio: 1/1; }
+.screen-ratio-4x3 #screen-area { aspect-ratio: 4/3; }
+.screen-ratio-stretch #screen-area { aspect-ratio: auto; }
+.screen-ratio-zoom #screen-area { aspect-ratio: auto; }
+
+/* Zoom level */
+.zoom-level-50 #game canvas { transform: scale(0.5); transform-origin: center; }
+.zoom-level-75 #game canvas { transform: scale(0.75); transform-origin: center; }
+.zoom-level-100 #game canvas { transform: scale(1); }
+.zoom-level-125 #game canvas { transform: scale(1.25); transform-origin: center; }
+.zoom-level-150 #game canvas { transform: scale(1.5); transform-origin: center; }
+.zoom-level-200 #game canvas { transform: scale(2); transform-origin: center; }
+
+/* Rotação */
+.screen-rotate-90 #game canvas { transform: rotate(90deg) scale(0.75); transform-origin: center; }
+.screen-rotate-180 #game canvas { transform: rotate(180deg); transform-origin: center; }
+.screen-rotate-270 #game canvas { transform: rotate(270deg) scale(0.75); transform-origin: center; }
+
+#game { width: 100%; height: 100%; display: none; position: relative; }
+#game canvas { width:100%!important; height:100%!important; image-rendering: pixelated; transition: transform 0.2s; }
+
+/* Shaders */
+#shader-overlay { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
+#screen-area.sh-none #shader-overlay { display: none; }
+#screen-area.sh-scanline #shader-overlay { background: repeating-linear-gradient(to bottom,transparent 0,transparent 3px,rgba(0,0,0,.32) 3px,rgba(0,0,0,.32) 4px); }
+#screen-area.sh-crt #shader-overlay { background: repeating-linear-gradient(to bottom,transparent 0,transparent 2px,rgba(0,0,0,.26) 2px,rgba(0,0,0,.26) 3px), repeating-linear-gradient(to right,transparent 0,transparent 2px,rgba(0,0,0,.09) 2px,rgba(0,0,0,.09) 3px); }
+#screen-area.sh-grid #shader-overlay { background: repeating-linear-gradient(to bottom,transparent 0,transparent 3px,rgba(0,0,0,.14) 3px,rgba(0,0,0,.14) 4px), repeating-linear-gradient(to right,transparent 0,transparent 3px,rgba(0,0,0,.14) 3px,rgba(0,0,0,.14) 4px); }
+#screen-area.sh-glow #shader-overlay { background: radial-gradient(ellipse at center,transparent 55%,rgba(139,111,212,.18) 100%); }
+
+/* Drop zone */
+#drop-zone {
+  position: absolute; inset: 0; z-index: 5;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 10px;
+  background: var(--screen-bg);
+}
+#loading-bar {
+  display: none; position: absolute; inset: 0; z-index: 6;
+  flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  background: var(--screen-bg);
+}
+#loading-bar.show { display: flex; }
+.bar-track { width: 200px; height: 3px; background: var(--surface3); border-radius: 3px; overflow: hidden; }
+.bar-fill { height: 100%; width: 0%; background: var(--accent); transition: width .3s; }
+
+/* Touch controls */
+.touch-zone {
+  padding: 12px 16px;
+  background: var(--surface2);
+  border-top: 0.5px solid var(--border);
+  display: none;
+}
+@media(max-width:600px){ .touch-zone { display: block; } }
+.tg { display: grid; grid-template-columns: 1fr auto 1fr; gap: 8px; }
+.dpad { display: grid; grid-template-columns: repeat(3,34px); grid-template-rows: repeat(3,34px); gap: 2px; }
+.dp, .ab, .sys {
+  background: var(--surface3); border: 0.5px solid var(--border2);
+  border-radius: 5px; color: var(--text); font-size: 13px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.dp:active, .ab:active, .sys:active { background: var(--accent); }
+.ab-wrap { display: grid; grid-template-columns: repeat(2,38px); grid-template-rows: repeat(2,38px); gap: 4px; transform: rotate(-15deg); }
+.ab { border-radius: 50%; }
+.ab-a { background: #c01f4d; }
+.ab-b { background: #3d4ec7; }
+
+/* Shortcuts hint */
+.shortcuts-hint {
+  position: fixed; bottom: 10px; right: 10px;
+  background: rgba(0,0,0,0.6); padding: 4px 8px;
+  border-radius: 6px; font-size: 9px; color: var(--muted2);
+  z-index: 50; pointer-events: none; backdrop-filter: blur(4px);
+}
+
+/* Modal */
+.modal {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.85);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.modal.open { opacity: 1; pointer-events: all; }
+.modal-box {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 24px;
+  width: min(900px, 92vw);
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  transform: scale(0.96) translateY(10px);
+  transition: transform 0.25s ease;
+  box-shadow: 0 25px 50px rgba(0,0,0,0.5);
+  overflow: hidden;
+}
+.modal.open .modal-box { transform: scale(1) translateY(0); }
+.modal-head {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface2);
+  flex-shrink: 0;
+}
+.modal-head span { font-size: 16px; font-weight: 600; }
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--muted2);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0 8px;
+  border-radius: 8px;
+  transition: all 0.15s;
+}
+.modal-close:hover { color: var(--text); background: var(--surface3); }
+
+/* TABS */
+.cfg-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 16px 0;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  flex-shrink: 0;
+  background: var(--surface);
+  scrollbar-width: thin;
+}
+.cfg-tabs::-webkit-scrollbar { height: 3px; }
+.cfg-tabs::-webkit-scrollbar-track { background: var(--surface3); border-radius: 3px; }
+.cfg-tabs::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 3px; }
+.cfg-tab {
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted2);
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  white-space: nowrap;
+  border-radius: 12px 12px 0 0;
+  transition: all 0.15s;
+}
+.cfg-tab:hover { color: var(--text); background: var(--surface2); }
+.cfg-tab.active { color: var(--accent); background: var(--surface2); }
+.cfg-tab.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+.modal-body::-webkit-scrollbar { width: 5px; }
+.modal-body::-webkit-scrollbar-track { background: var(--surface3); border-radius: 5px; }
+.modal-body::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 5px; }
+
+.cfg-pane {
+  display: none;
+  flex-direction: column;
+  gap: 24px;
+  animation: fadeIn 0.2s ease;
+}
+.cfg-pane.active { display: flex; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.cfg-section { margin-bottom: 8px; }
+.cfg-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 12px;
+  letter-spacing: 1px;
+}
+
+.opt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
+  gap: 10px;
+}
+.opt-card {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.opt-card:hover { background: var(--surface3); transform: translateY(-2px); border-color: var(--accent); }
+.opt-card.active { border-color: var(--accent); background: var(--accent-lo); box-shadow: 0 0 0 1px var(--accent); }
+.opt-name { font-size: 12px; font-weight: 500; }
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--surface2);
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+.toggle-info { display: flex; flex-direction: column; gap: 4px; }
+.toggle-name { font-size: 13px; font-weight: 500; }
+.toggle-sub { font-size: 11px; color: var(--muted2); }
+.toggle {
+  width: 48px;
+  height: 26px;
+  background: var(--surface3);
+  border-radius: 13px;
+  position: relative;
+  cursor: pointer;
+  transition: background 0.2s;
+  border: 1px solid var(--border2);
+  flex-shrink: 0;
+}
+.toggle.on { background: var(--accent); }
+.toggle::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: white;
+  transition: left 0.2s;
+}
+.toggle.on::after { left: 23px; }
+
+.slider-row {
+  display: grid;
+  grid-template-columns: 85px 1fr 50px;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.slider-lbl { font-size: 12px; color: var(--muted2); }
+input[type=range] {
+  -webkit-appearance: none;
+  height: 4px;
+  background: var(--surface3);
+  border-radius: 4px;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+.slider-val { font-size: 11px; color: var(--muted2); text-align: right; }
+
+.cheat-item {
+  background: var(--surface2);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  border: 1px solid var(--border);
+}
+.cheat-code-input {
+  width: 100%;
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 8px 12px;
+  font-family: monospace;
+  margin-bottom: 8px;
+}
+.cheat-desc-input {
+  width: 70%;
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.rom-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--surface3);
+  border-radius: 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.rom-item:hover { background: var(--accent-lo); transform: translateX(2px); }
+.rom-item-info { flex: 1; }
+.rom-item-name { font-size: 13px; font-weight: 500; }
+.rom-item-meta { font-size: 11px; color: var(--muted2); }
+.rom-item-play {
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: white;
+  padding: 6px 14px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.folder-drop {
+  border: 2px dashed var(--border2);
+  border-radius: 16px;
+  padding: 28px;
+  text-align: center;
+  margin-bottom: 20px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.folder-drop:hover { border-color: var(--accent); background: var(--accent-lo); }
+.rom-search {
+  width: 100%;
+  background: var(--surface3);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  color: var(--text);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+}
+.rom-empty { text-align: center; padding: 40px; color: var(--muted2); }
+
+.action-btn {
+  height: 38px;
+  padding: 0 16px;
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  transition: all 0.15s;
+}
+.action-btn:hover { background: var(--surface3); transform: scale(0.98); }
+
+#toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(70px);
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 12px;
+  padding: 10px 20px;
+  font-size: 13px;
+  transition: transform 0.25s;
+  opacity: 0;
+  z-index: 1000;
+  backdrop-filter: blur(10px);
+  white-space: nowrap;
+}
+#toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+input[type=file] { display: none; }
+.kbd {
+  background: var(--surface3);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-family: monospace;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--border2);
+}
+.kbd:hover { background: var(--accent); color: white; }
+.no-rom-msg { text-align: center; padding: 24px; color: var(--muted2); }
+.speed-btn {
+  background: var(--surface3); border: none;
+  border-radius: 4px; color: var(--text);
+  padding: 2px 6px; cursor: pointer;
+  font-size: 10px;
+}
+.speed-btn.active { background: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><div class="logo-mark"></div>GBA Emulator Ultimate</div>
+  <div class="header-right">
+    <div class="pill"><span class="dot" id="gp-dot"></span><span id="gp-label">Sem controle</span></div>
+    <div class="pill"><span id="fps-disp">— fps</span></div>
+    <div class="speed-control" id="speed-control" style="display:flex;gap:4px;background:var(--surface2);padding:2px 8px;border-radius:20px">
+      <button class="speed-btn" onclick="setEmulatorSpeed(0.5)">0.5x</button>
+      <button class="speed-btn active" onclick="setEmulatorSpeed(1)">1x</button>
+      <button class="speed-btn" onclick="setEmulatorSpeed(2)">2x</button>
+      <button class="speed-btn" onclick="setEmulatorSpeed(4)">4x</button>
+    </div>
+    <button class="tb-btn" onclick="toggleTheme()" style="background:transparent">🌓</button>
+  </div>
+</header>
+
+<main>
+  <div class="emu-card">
+    <div class="toolbar">
+      <button class="tb-btn accent" onclick="openRomFolder()">📁 Biblioteca</button>
+      <button class="tb-btn" onclick="document.getElementById('rom-input').click()">📂 ROM</button>
+      <input type="file" id="rom-input" accept=".gba,.gbc,.gb,.zip">
+      <div class="tb-sep"></div>
+      <button class="tb-btn" id="btn-pause" onclick="togglePauseEmulator()" disabled>⏸ Pausar</button>
+      <button class="tb-btn" id="btn-reset" onclick="resetEmulator()" disabled>🔄 Reset</button>
+      <button class="tb-btn" onclick="rewindEmulator()">⏪ Rewind</button>
+      <button class="tb-btn" onclick="takeScreenshot()">📸 Screenshot</button>
+      <div class="tb-sep"></div>
+      <button class="tb-btn" onclick="goFullscreen()">⛶ Tela cheia</button>
+      <div class="tb-spacer"></div>
+      <button class="tb-btn" onclick="openCfg()">⚙️ Config</button>
+      <button class="tb-btn red" id="btn-stop" onclick="stopEmulator()" disabled>⏹</button>
+    </div>
+
+    <div id="screen-area" class="sh-none">
+      <div id="game"></div>
+      <div id="shader-overlay"></div>
+      <div id="drop-zone">
+        <div class="dz-glyph">🎮</div>
+        <div class="dz-title">Solte a ROM aqui</div>
+        <button class="tb-btn accent" onclick="document.getElementById('rom-input').click()">📂 Escolher arquivo</button>
+      </div>
+      <div id="loading-bar"><div class="bar-track"><div class="bar-fill"></div></div></div>
+    </div>
+
+    <div class="touch-zone">
+      <div class="tg">
+        <div class="dpad">
+          <div></div><button class="dp" data-key="ArrowUp">▲</button><div></div>
+          <button class="dp" data-key="ArrowLeft">◀</button><div></div><button class="dp" data-key="ArrowRight">▶</button>
+          <div></div><button class="dp" data-key="ArrowDown">▼</button><div></div>
+        </div>
+        <div><button class="sys" data-key="Enter">SELECT</button><button class="sys" data-key="Shift">START</button></div>
+        <div><div class="ab-wrap"><div></div><button class="ab ab-a" data-key="x">A</button><button class="ab ab-b" data-key="z">B</button><div></div></div></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="shortcuts-hint">⏪ Ctrl+Z Rewind | F1-F9 Slots | F11 Fullscreen | 📸 PrintScreen | +/- Zoom</div>
+
+<!-- Modal de Configurações -->
+<div id="cfg-modal" class="modal" onclick="if(event.target===this)closeCfg()">
+  <div class="modal-box">
+    <div class="modal-head"><span>⚙️ Configurações</span><button class="modal-close" onclick="closeCfg()">✕</button></div>
+    <div class="cfg-tabs">
+      <button class="cfg-tab active" data-pane="video" onclick="switchCfgTab(this)">🎨 Vídeo</button>
+      <button class="cfg-tab" data-pane="audio" onclick="switchCfgTab(this)">🔊 Áudio</button>
+      <button class="cfg-tab" data-pane="controls" onclick="switchCfgTab(this)">🎮 Controles</button>
+      <button class="cfg-tab" data-pane="saves" onclick="switchCfgTab(this)">💾 Saves</button>
+      <button class="cfg-tab" data-pane="cheats" onclick="switchCfgTab(this)">🛠️ Cheats</button>
+      <button class="cfg-tab" data-pane="rom" onclick="switchCfgTab(this)">📦 ROM</button>
+    </div>
+    <div class="modal-body">
+      <!-- Vídeo -->
+      <div class="cfg-pane active" id="pane-video">
+        <div class="cfg-section"><div class="cfg-section-label">📐 PROPORÇÃO DE TELA</div><div class="opt-grid" id="ratio-grid"></div></div>
+        <div class="cfg-section"><div class="cfg-section-label">🔍 ZOOM</div><div class="opt-grid" id="zoom-grid"></div></div>
+        <div class="cfg-section"><div class="cfg-section-label">🔄 ROTAÇÃO</div><div class="opt-grid" id="rotate-grid"></div></div>
+        <div class="cfg-section"><div class="cfg-section-label">✨ SHADER</div><div class="opt-grid" id="shader-grid"></div></div>
+        <div class="cfg-section"><div class="cfg-section-label">🎨 FILTRO DE COR</div><div class="opt-grid" id="filter-grid"></div></div>
+        <div class="cfg-section">
+          <div class="cfg-section-label">⚙️ OPÇÕES</div>
+          <div class="toggle-row"><div class="toggle-info"><span class="toggle-name">🖱️ Janela redimensionável</span><span class="toggle-sub">Arraste as bordas da tela</span></div><div class="toggle" id="tog-resize" onclick="toggleResizable(this)"></div></div>
+          <div class="toggle-row"><div class="toggle-info"><span class="toggle-name">📺 Pixel perfeito</span><span class="toggle-sub">Sem suavização</span></div><div class="toggle on" id="tog-pixel" onclick="togglePixel(this)"></div></div>
+          <div class="toggle-row"><div class="toggle-info"><span class="toggle-name">🌓 Modo escuro</span><span class="toggle-sub">Alternar tema</span></div><div class="toggle on" id="tog-dark" onclick="toggleDarkMode(this)"></div></div>
+          <div class="toggle-row"><div class="toggle-info"><span class="toggle-name">👆 Controles touch</span><span class="toggle-sub">Forçar em qualquer tela</span></div><div class="toggle" id="tog-touch" onclick="toggleTouch(this)"></div></div>
+          <div class="toggle-row"><div class="toggle-info"><span class="toggle-name">📊 Mostrar FPS</span><span class="toggle-sub">Exibir contador</span></div><div class="toggle on" id="tog-fps" onclick="toggleFPS(this)"></div></div>
+        </div>
+      </div>
+
+      <!-- Áudio -->
+      <div class="cfg-pane" id="pane-audio">
+        <div class="slider-row"><span class="slider-lbl">🔊 Volume</span><input type="range" min="0" max="100" value="80" id="vol" oninput="setVolume(this.value)"><span class="slider-val" id="vol-lbl">80%</span></div>
+        <div class="slider-row"><span class="slider-lbl">🎵 Grave (Bass)</span><input type="range" min="-12" max="12" value="0" id="bass" oninput="updateEqualizer()"><span class="slider-val" id="bass-lbl">0dB</span></div>
+        <div class="slider-row"><span class="slider-lbl">🎵 Agudo (Treble)</span><input type="range" min="-12" max="12" value="0" id="treble" oninput="updateEqualizer()"><span class="slider-val" id="treble-lbl">0dB</span></div>
+        <div class="toggle-row"><div class="toggle-info"><span class="toggle-name">🔇 Mudo</span><span class="toggle-sub">Silenciar saída</span></div><div class="toggle" id="tog-mute" onclick="toggleMute(this)"></div></div>
+      </div>
+
+      <!-- Controles -->
+      <div class="cfg-pane" id="pane-controls">
+        <div id="gp-list" class="no-rom-msg">Nenhum controle detectado</div>
+        <div class="cfg-section-label">🎮 Remapear teclado</div>
+        <div id="keybinds-list"></div>
+        <button class="action-btn" onclick="resetKeybinds()">Resetar teclas</button>
+      </div>
+
+      <!-- Saves -->
+      <div class="cfg-pane" id="pane-saves">
+        <div class="slider-row"><span class="slider-lbl">⏱️ Auto-save (min)</span><input type="range" min="0" max="30" value="5" id="autosave-interval" oninput="updateAutosaveInterval()"><span class="slider-val" id="autosave-lbl">5 min</span></div>
+        <div class="toggle-row"><div class="toggle-info"><span class="toggle-name">💾 Auto-save ativo</span><span class="toggle-sub">Salvar automaticamente</span></div><div class="toggle" id="tog-autosave" onclick="toggleAutosave(this)"></div></div>
+        <button class="action-btn" onclick="exportAllSaves()">📤 Exportar todos os saves</button>
+        <button class="action-btn" onclick="importSaves()">📥 Importar saves (backup)</button>
+        <input type="file" id="import-saves-input" accept=".json">
+      </div>
+
+      <!-- Cheats -->
+      <div class="cfg-pane" id="pane-cheats">
+        <div class="cfg-section-label">🛠️ Game Genie / Action Replay</div>
+        <div id="cheats-list"></div>
+        <button class="action-btn" onclick="addCheat()">+ Adicionar código</button>
+        <div class="cfg-section-label" style="margin-top:16px">📖 Exemplos:</div>
+        <div style="font-size:12px;color:var(--muted2);padding:8px;background:var(--surface2);border-radius:10px">
+          Game Genie (GBA): 1A2B-3C4D (Vida infinita)<br>
+          Action Replay: 12345678 1234ABCD (Dinheiro máximo)
+        </div>
+      </div>
+
+      <!-- ROM -->
+      <div class="cfg-pane" id="pane-rom">
+        <div id="rom-block"><div class="no-rom-msg">Nenhuma ROM carregada</div></div>
+        <div class="cfg-section-label">📜 Histórico de jogos</div>
+        <div id="recent-games"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Biblioteca -->
+<div id="rom-folder-modal" class="modal" onclick="if(event.target===this)closeRomFolder()">
+  <div class="modal-box">
+    <div class="modal-head"><span>📁 Biblioteca de ROMs</span><button class="modal-close" onclick="closeRomFolder()">✕</button></div>
+    <div class="modal-body">
+      <div class="folder-drop" onclick="document.getElementById('folder-input').click()">
+        <input type="file" id="folder-input" webkitdirectory multiple>
+        <div style="font-size:32px;margin-bottom:8px">📂</div>
+        <div>Clique para selecionar uma pasta de ROMs</div>
+        <div style="font-size:11px;margin-top:6px">.gba, .gbc, .gb</div>
+      </div>
+      <input class="rom-search" id="rom-search" placeholder="🔍 Buscar ROM…" oninput="filterROMs(this.value)">
+      <div id="rom-list"></div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ==================== VARIÁVEIS GLOBAIS ====================
+let emulator = null;
+let isRunning = false;
+let isPaused = false;
+let currentRomName = '';
+let currentRomFile = null;
+let currentSpeed = 1;
+let rewindBuffer = [];
+let autosaveTimer = null;
+let autosaveEnabled = false;
+let audioContext = null;
+let bassFilter = null;
+let trebleFilter = null;
+let isMuted = false;
+
+// Configurações visuais
+let activeShader = 'none';
+let activeFilter = 'none';
+let activeRatio = '3x2';
+let activeZoom = '100';
+let activeRotate = '0';
+let fpsVisible = true;
+let frames = 0;
+let lastFpsTime = Date.now();
+
+// Keybinds
+let keybinds = {
+  'a': 'x', 'b': 'z', 'l': 'a', 'r': 's', 'start': 'Enter', 'select': 'Shift',
+  'up': 'ArrowUp', 'down': 'ArrowDown', 'left': 'ArrowLeft', 'right': 'ArrowRight',
+  'pause': 'p', 'fullscreen': 'f', 'rewind': 'z', 'screenshot': 'PrintScreen'
+};
+
+// Cheats
+let cheats = [];
+
+// ROM Library
+let romLibrary = [];
+let recentGames = JSON.parse(localStorage.getItem('recentGames') || '[]');
+
+// Configurações de UI
+const SHADERS = [
+  { id: 'none', name: 'Nenhum' }, { id: 'scanline', name: 'Scanlines' },
+  { id: 'crt', name: 'CRT' }, { id: 'grid', name: 'Grid' }, { id: 'glow', name: 'Glow' }
+];
+const FILTERS = [
+  { id: 'none', name: 'Original' }, { id: 'sharp', name: 'Nítido' },
+  { id: 'vivid', name: 'Vívido' }, { id: 'grayscale', name: 'P&B' },
+  { id: 'sepia', name: 'Sépia' }, { id: 'cool', name: 'Frio' }, { id: 'warm', name: 'Quente' }
+];
+const RATIOS = [
+  { id: '3x2', name: 'Original (3:2)' }, { id: '1x1', name: '1:1' },
+  { id: '4x3', name: '4:3' }, { id: 'stretch', name: 'Esticado' }, { id: 'zoom', name: 'Zoom' }
+];
+const ZOOMS = [
+  { id: '50', name: '50%' }, { id: '75', name: '75%' }, { id: '100', name: '100%' },
+  { id: '125', name: '125%' }, { id: '150', name: '150%' }, { id: '200', name: '200%' }
+];
+const ROTATES = [
+  { id: '0', name: '0°' }, { id: '90', name: '90°' }, { id: '180', name: '180°' }, { id: '270', name: '270°' }
+];
+
+// ==================== FUNÇÕES DO EMULADOR ====================
+async function loadROM(file) {
+  if(!file) return;
+  
+  currentRomName = file.name.replace(/\.[^.]+$/, '');
+  currentRomFile = file;
+  
+  // Adicionar ao histórico
+  recentGames = recentGames.filter(r => r.name !== currentRomName);
+  recentGames.unshift({ name: currentRomName, date: new Date().toISOString() });
+  recentGames = recentGames.slice(0, 20);
+  localStorage.setItem('recentGames', JSON.stringify(recentGames));
+  renderRecentGames();
+  
+  document.getElementById('rom-block').innerHTML = `<div style="padding:10px;background:var(--surface2);border-radius:12px"><div style="font-weight:500">${file.name}</div><div style="font-size:11px;color:var(--muted2)">Carregado com sucesso!</div></div>`;
+  document.getElementById('drop-zone').style.display = 'none';
+  
+  const loadingBar = document.getElementById('loading-bar');
+  loadingBar.classList.add('show');
+  
+  const url = URL.createObjectURL(file);
+  
+  // Configurar EmulatorJS
+  window.EJS_player = '#game';
+  window.EJS_core = 'gba';
+  window.EJS_gameUrl = url;
+  window.EJS_pathtodata = 'https://cdn.emulatorjs.org/stable/data/';
+  window.EJS_startOnLoaded = true;
+  window.EJS_color = '#8b6fd4';
+  window.EJS_language = 'pt-BR';
+  window.EJS_Buttons = {
+    playPause: true, restart: true, mute: false, settings: true,
+    fullscreen: true, saveState: true, loadState: true, gamepad: true
+  };
+  
+  window.EJS_onGameStart = () => {
+    loadingBar.classList.remove('show');
+    document.getElementById('game').style.display = 'block';
+    isRunning = true;
+    isPaused = false;
+    document.getElementById('btn-pause').disabled = false;
+    document.getElementById('btn-reset').disabled = false;
+    document.getElementById('btn-stop').disabled = false;
+    
+    // Obter referência ao emulador
+    setTimeout(() => {
+      emulator = window.EJS_emulator;
+      if(emulator) {
+        applyVideoSettings();
+        setEmulatorSpeed(currentSpeed);
+        if(autosaveEnabled) startAutosave();
+      }
+    }, 1000);
+    
+    toast(`▶ ${file.name} carregado!`);
+  };
+  
+  // Carregar script do emulador se necessário
+  if(!document.querySelector('script[src*="loader.js"]')) {
+    const script = document.createElement('script');
+    script.src = 'https://cdn.emulatorjs.org/stable/data/loader.js';
+    document.body.appendChild(script);
+  } else {
+    // Recarregar ROM
+    if(window.EJS_emulator && window.EJS_emulator.loadGame) {
+      window.EJS_emulator.loadGame(url);
+    }
+  }
+}
+
+function togglePauseEmulator() {
+  if(!isRunning) return;
+  if(emulator) {
+    if(isPaused) {
+      emulator.play();
+      toast('▶ Continuando');
+    } else {
+      emulator.pause();
+      toast('⏸ Pausado');
+    }
+    isPaused = !isPaused;
+  }
+}
+
+function resetEmulator() {
+  if(!isRunning) return;
+  if(emulator && emulator.restart) {
+    emulator.restart();
+    toast('🔄 Reiniciado');
+  }
+}
+
+function stopEmulator() {
+  isRunning = false;
+  if(emulator && emulator.pause) emulator.pause();
+  document.getElementById('game').style.display = 'none';
+  document.getElementById('drop-zone').style.display = 'flex';
+  document.getElementById('btn-pause').disabled = true;
+  document.getElementById('btn-reset').disabled = true;
+  document.getElementById('btn-stop').disabled = true;
+  if(autosaveTimer) clearInterval(autosaveTimer);
+  toast('⏹ Emulador parado');
+}
+
+function setEmulatorSpeed(speed) {
+  currentSpeed = speed;
+  if(emulator && emulator.setSpeed) {
+    emulator.setSpeed(speed);
+  }
+  document.querySelectorAll('.speed-btn').forEach(btn => btn.classList.remove('active'));
+  if(event && event.target) event.target.classList.add('active');
+  toast(`Velocidade: ${speed}x`);
+}
+
+function rewindEmulator() {
+  if(!isRunning || rewindBuffer.length === 0) {
+    toast('Nada para rebobinar');
+    return;
+  }
+  const lastState = rewindBuffer.pop();
+  if(emulator && emulator.loadState) {
+    emulator.loadState(lastState);
+    toast('⏪ Rebobinado!');
+  }
+}
+
+// Capturar estado para rewind
+setInterval(() => {
+  if(isRunning && emulator && emulator.saveState) {
+    try {
+      const state = emulator.saveState();
+      if(state) {
+        rewindBuffer.push(state);
+        while(rewindBuffer.length > 100) rewindBuffer.shift();
+      }
+    } catch(e) {}
+  }
+}, 5000);
+
+// ==================== FUNÇÕES DE ÁUDIO COM EQUALIZADOR ====================
+let mediaStream = null;
+
+function setupAudioEqualizer() {
+  if(audioContext) return;
+  
+  try {
+    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    
+    // Criar filtros
+    bassFilter = audioContext.createBiquadFilter();
+    bassFilter.type = 'lowshelf';
+    bassFilter.frequency.value = 200;
+    bassFilter.gain.value = 0;
+    
+    trebleFilter = audioContext.createBiquadFilter();
+    trebleFilter.type = 'highshelf';
+    trebleFilter.frequency.value = 2000;
+    trebleFilter.gain.value = 0;
+    
+    bassFilter.connect(trebleFilter);
+    trebleFilter.connect(audioContext.destination);
+  } catch(e) {
+    console.warn('Equalizador não suportado:', e);
+  }
+}
+
+function updateEqualizer() {
+  if(!audioContext) setupAudioEqualizer();
+  
+  const bass = parseFloat(document.getElementById('bass').value);
+  const treble = parseFloat(document.getElementById('treble').value);
+  
+  document.getElementById('bass-lbl').textContent = (bass > 0 ? '+' : '') + bass + 'dB';
+  document.getElementById('treble-lbl').textContent = (treble > 0 ? '+' : '') + treble + 'dB';
+  
+  if(bassFilter) bassFilter.gain.value = bass;
+  if(trebleFilter) trebleFilter.gain.value = treble;
+  
+  localStorage.setItem('gba_bass', bass);
+  localStorage.setItem('gba_treble', treble);
+}
+
+function setVolume(value) {
+  document.getElementById('vol-lbl').textContent = value + '%';
+  if(emulator && emulator.setVolume) {
+    emulator.setVolume(isMuted ? 0 : value / 100);
+  }
+  localStorage.setItem('gba_volume', value);
+}
+
+function toggleMute(el) {
+  el.classList.toggle('on');
+  isMuted = el.classList.contains('on');
+  if(emulator && emulator.setVolume) {
+    emulator.setVolume(isMuted ? 0 : document.getElementById('vol').value / 100);
+  }
+  localStorage.setItem('gba_mute', isMuted ? '1' : '0');
+  toast(isMuted ? '🔇 Mudo ativado' : '🔊 Som ativado');
+}
+
+// ==================== FUNÇÕES DE VÍDEO ====================
+function buildGrid(items, containerId, clickFn, getActive) {
+  const container = document.getElementById(containerId);
+  if(!container) return;
+  container.innerHTML = items.map(item => `
+    <div class="opt-card ${getActive() === item.id ? 'active' : ''}" onclick="${clickFn}('${item.id}')">
+      <div class="opt-name">${item.name}</div>
+    </div>
+  `).join('');
+}
+
+function setShader(id) {
+  const screenArea = document.getElementById('screen-area');
+  screenArea.classList.remove(`sh-${activeShader}`);
+  screenArea.classList.add(`sh-${id}`);
+  activeShader = id;
+  buildGrid(SHADERS, 'shader-grid', 'setShader', () => activeShader);
+  localStorage.setItem('gba_shader', id);
+  toast(`Shader: ${SHADERS.find(s=>s.id===id).name}`);
+}
+
+function setFilter(id) {
+  activeFilter = id;
+  const filterStyles = {
+    none: '', sharp: 'contrast(1.15) saturate(1.1)', vivid: 'saturate(1.6) contrast(1.1)',
+    grayscale: 'grayscale(1) contrast(1.1)', sepia: 'sepia(0.7) brightness(0.95)',
+    cool: 'hue-rotate(200deg) saturate(1.2)', warm: 'hue-rotate(-20deg) saturate(1.3)'
+  };
+  const gameDiv = document.getElementById('game');
+  if(gameDiv) gameDiv.style.filter = filterStyles[id] || '';
+  buildGrid(FILTERS, 'filter-grid', 'setFilter', () => activeFilter);
+  localStorage.setItem('gba_filter', id);
+  toast(`Filtro: ${FILTERS.find(f=>f.id===id).name}`);
+}
+
+function setRatio(id) {
+  document.body.classList.remove(`screen-ratio-${activeRatio}`);
+  document.body.classList.add(`screen-ratio-${id}`);
+  activeRatio = id;
+  buildGrid(RATIOS, 'ratio-grid', 'setRatio', () => activeRatio);
+  localStorage.setItem('gba_ratio', id);
+}
+
+function setZoom(id) {
+  document.body.classList.remove(`zoom-level-${activeZoom}`);
+  document.body.classList.add(`zoom-level-${id}`);
+  activeZoom = id;
+  buildGrid(ZOOMS, 'zoom-grid', 'setZoom', () => activeZoom);
+  localStorage.setItem('gba_zoom', id);
+  toast(`Zoom: ${id}%`);
+}
+
+function setRotate(id) {
+  document.body.classList.remove(`screen-rotate-${activeRotate}`);
+  document.body.classList.add(`screen-rotate-${id}`);
+  activeRotate = id;
+  buildGrid(ROTATES, 'rotate-grid', 'setRotate', () => activeRotate);
+  localStorage.setItem('gba_rotate', id);
+}
+
+function toggleResizable(el) {
+  el.classList.toggle('on');
+  document.getElementById('screen-area').classList.toggle('resizable', el.classList.contains('on'));
+  localStorage.setItem('gba_resizable', el.classList.contains('on') ? '1' : '0');
+  toast(el.classList.contains('on') ? '🖱️ Janela redimensionável ativada' : '🖱️ Janela redimensionável desativada');
+}
+
+function togglePixel(el) {
+  el.classList.toggle('on');
+  document.getElementById('game').style.imageRendering = el.classList.contains('on') ? 'pixelated' : 'auto';
+  localStorage.setItem('gba_pixel', el.classList.contains('on') ? '1' : '0');
+}
+
+function toggleDarkMode(el) {
+  el.classList.toggle('on');
+  document.body.classList.toggle('light', !el.classList.contains('on'));
+  localStorage.setItem('gba_darkmode', el.classList.contains('on') ? '1' : '0');
+}
+
+function toggleTouch(el) {
+  el.classList.toggle('on');
+  document.querySelector('.touch-zone').style.display = el.classList.contains('on') ? 'block' : '';
+  localStorage.setItem('gba_touch', el.classList.contains('on') ? '1' : '0');
+}
+
+function toggleFPS(el) {
+  el.classList.toggle('on');
+  fpsVisible = el.classList.contains('on');
+  const fpsPill = document.querySelector('.pill:has(#fps-disp)');
+  if(fpsPill) fpsPill.style.display = fpsVisible ? 'flex' : 'none';
+  localStorage.setItem('gba_fps', fpsVisible ? '1' : '0');
+}
+
+function toggleTheme() {
+  document.getElementById('tog-dark').click();
+}
+
+function applyVideoSettings() {
+  // Aplicar todas as configurações de vídeo ao emulador
+  const canvas = document.querySelector('#game canvas');
+  if(canvas) {
+    canvas.style.imageRendering = document.getElementById('tog-pixel').classList.contains('on') ? 'pixelated' : 'auto';
+  }
+}
+
+function takeScreenshot() {
+  const canvas = document.querySelector('#game canvas');
+  if(!canvas) {
+    toast('Aguarde o jogo iniciar');
+    return;
+  }
+  const link = document.createElement('a');
+  link.download = `screenshot_${currentRomName}_${Date.now()}.png`;
+  link.href = canvas.toDataURL();
+  link.click();
+  toast('📸 Screenshot salva!');
+}
+
+function goFullscreen() {
+  const screenArea = document.getElementById('screen-area');
+  if(screenArea.requestFullscreen) {
+    screenArea.requestFullscreen();
+    toast('⛶ Modo tela cheia (ESC para sair)');
+  }
+}
+
+// ==================== FUNÇÕES DE SAVE ====================
+async function saveGameToSlot(slot) {
+  if(!isRunning || !emulator || !emulator.saveState) {
+    toast('Não é possível salvar agora');
+    return false;
+  }
+  
+  try {
+    const state = emulator.saveState();
+    if(!state) throw new Error('Falha ao capturar estado');
+    
+    const saveData = {
+      id: `${currentRomName}_slot_${slot}`,
+      romName: currentRomName,
+      slot: slot,
+      date: new Date().toISOString(),
+      state: Array.from(new Uint8Array(state))
+    };
+    
+    localStorage.setItem(`gba_save_${currentRomName}_${slot}`, JSON.stringify(saveData));
+    toast(`💾 Salvo no slot ${slot}`);
+    return true;
+  } catch(e) {
+    toast('Erro ao salvar: ' + e.message);
+    return false;
+  }
+}
+
+async function loadGameFromSlot(slot) {
+  if(!isRunning || !emulator || !emulator.loadState) {
+    toast('Não é possível carregar agora');
+    return false;
+  }
+  
+  const saveKey = `gba_save_${currentRomName}_${slot}`;
+  const saveData = localStorage.getItem(saveKey);
+  
+  if(!saveData) {
+    toast(`Slot ${slot} vazio`);
+    return false;
+  }
+  
+  try {
+    const data = JSON.parse(saveData);
+    const state = new Uint8Array(data.state);
+    emulator.loadState(state.buffer);
+    toast(`▶ Carregado slot ${slot}`);
+    return true;
+  } catch(e) {
+    toast('Erro ao carregar: ' + e.message);
+    return false;
+  }
+}
+
+function startAutosave() {
+  if(autosaveTimer) clearInterval(autosaveTimer);
+  const minutes = parseInt(document.getElementById('autosave-interval').value);
+  if(minutes > 0 && autosaveEnabled && isRunning) {
+    autosaveTimer = setInterval(() => {
+      if(isRunning && emulator && emulator.saveState) {
+        saveGameToSlot('autosave');
+        toast('💾 Auto-save realizado');
+      }
+    }, minutes * 60 * 1000);
+  }
+}
+
+function updateAutosaveInterval() {
+  const val = document.getElementById('autosave-interval').value;
+  document.getElementById('autosave-lbl').textContent = val + ' min';
+  if(autosaveEnabled) startAutosave();
+  localStorage.setItem('gba_autosave_interval', val);
+}
+
+function toggleAutosave(el) {
+  el.classList.toggle('on');
+  autosaveEnabled = el.classList.contains('on');
+  if(autosaveEnabled && isRunning) {
+    startAutosave();
+  } else if(autosaveTimer) {
+    clearInterval(autosaveTimer);
+  }
+  localStorage.setItem('gba_autosave', autosaveEnabled ? '1' : '0');
+}
+
+function exportAllSaves() {
+  const saves = [];
+  for(let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if(key && key.startsWith('gba_save_')) {
+      saves.push({ key, data: localStorage.getItem(key) });
+    }
+  }
+  
+  const exportData = JSON.stringify(saves);
+  const blob = new Blob([exportData], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `gba_saves_backup_${Date.now()}.json`;
+  a.click();
+  toast('📦 Saves exportados!');
+}
+
+function importSaves() {
+  document.getElementById('import-saves-input').click();
+}
+
+document.getElementById('import-saves-input').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if(!file) return;
+  
+  const text = await file.text();
+  const saves = JSON.parse(text);
+  
+  for(const save of saves) {
+    localStorage.setItem(save.key, save.data);
+  }
+  
+  toast('📥 Saves importados!');
+  e.target.value = '';
+});
+
+// ==================== FUNÇÕES DE CHEAT ====================
+function addCheat() {
+  cheats.push({ code: '', desc: `Cheat ${cheats.length+1}`, enabled: true });
+  renderCheats();
+}
+
+function removeCheat(index) {
+  cheats.splice(index, 1);
+  renderCheats();
+}
+
+function updateCheat(index, field, value) {
+  cheats[index][field] = value;
+  
+  // Tentar aplicar o cheat se o emulador suportar
+  if(field === 'enabled' && emulator && emulator.writeMemory) {
+    applyCheatToEmulator(cheats[index]);
+  }
+}
+
+function applyCheatToEmulator(cheat) {
+  if(!cheat.enabled || !cheat.code) return;
+  
+  // Parse de códigos Game Genie (simplificado)
+  const code = cheat.code.toUpperCase().replace(/-/g, '');
+  
+  // Aqui você implementaria a lógica real de aplicação de cheats
+  // Dependendo do formato do código (Game Genie, Action Replay, etc.)
+  console.log(`Aplicando cheat: ${cheat.desc} - ${code}`);
+  
+  // Placeholder: mostrar mensagem
+  toast(`Cheat "${cheat.desc}" ${cheat.enabled ? 'ativado' : 'desativado'}`);
+}
+
+function renderCheats() {
+  const el = document.getElementById('cheats-list');
+  if(!el) return;
+  
+  if(cheats.length === 0) {
+    el.innerHTML = '<div class="no-rom-msg">Nenhum cheat adicionado. Clique em "+" para adicionar.</div>';
+    return;
+  }
+  
+  el.innerHTML = cheats.map((cheat, i) => `
+    <div class="cheat-item">
+      <input class="cheat-code-input" value="${escapeHtml(cheat.code)}" placeholder="Código (ex: 1A2B-3C4D)" onchange="updateCheat(${i},'code',this.value)">
+      <input class="cheat-desc-input" value="${escapeHtml(cheat.desc)}" placeholder="Descrição" onchange="updateCheat(${i},'desc',this.value)">
+      <label style="display:inline-flex;align-items:center;gap:6px;margin-top:8px">
+        <input type="checkbox" ${cheat.enabled ? 'checked' : ''} onchange="updateCheat(${i},'enabled',this.checked)">
+        <span style="font-size:12px">Ativar cheat</span>
+      </label>
+      <button class="action-btn" style="background:var(--danger);color:white;margin-left:12px" onclick="removeCheat(${i})">🗑 Remover</button>
+    </div>
+  `).join('');
+}
+
+function escapeHtml(str) {
+  return str.replace(/[&<>]/g, function(m) {
+    if(m === '&') return '&amp;';
+    if(m === '<') return '&lt;';
+    if(m === '>') return '&gt;';
+    return m;
+  });
+}
+
+// ==================== FUNÇÕES DE KEYBIND ====================
+function renderKeybinds() {
+  const el = document.getElementById('keybinds-list');
+  if(!el) return;
+  
+  const actions = ['a', 'b', 'l', 'r', 'start', 'select', 'up', 'down', 'left', 'right', 'pause', 'fullscreen', 'rewind', 'screenshot'];
+  el.innerHTML = actions.map(action => `
+    <div class="slider-row" style="margin-bottom:8px">
+      <span style="width:80px">${action.toUpperCase()}</span>
+      <span class="kbd" onclick="remapKey('${action}')" id="key-${action}">${keybinds[action] || '?'}</span>
+      <span style="font-size:10px;color:var(--muted2)">clique para mudar</span>
+    </div>
+  `).join('');
+}
+
+function remapKey(action) {
+  const span = document.getElementById(`key-${action}`);
+  if(!span) return;
+  
+  span.textContent = '⌨️';
+  const handler = (e) => {
+    e.preventDefault();
+    let key = e.key;
+    if(key === ' ') key = 'Space';
+    if(key === 'Escape') key = 'Esc';
+    
+    keybinds[action] = key;
+    span.textContent = key;
+    localStorage.setItem('gba_keybinds', JSON.stringify(keybinds));
+    document.removeEventListener('keydown', handler);
+    toast(`${action.toUpperCase()} → ${key}`);
+  };
+  document.addEventListener('keydown', handler, { once: true });
+}
+
+function resetKeybinds() {
+  keybinds = {
+    'a': 'x', 'b': 'z', 'l': 'a', 'r': 's', 'start': 'Enter', 'select': 'Shift',
+    'up': 'ArrowUp', 'down': 'ArrowDown', 'left': 'ArrowLeft', 'right': 'ArrowRight',
+    'pause': 'p', 'fullscreen': 'f', 'rewind': 'z', 'screenshot': 'PrintScreen'
+  };
+  localStorage.setItem('gba_keybinds', JSON.stringify(keybinds));
+  renderKeybinds();
+  toast('Teclas resetadas para o padrão');
+}
+
+// ==================== ATALHOS DE TECLADO ====================
+document.addEventListener('keydown', (e) => {
+  const key = e.key;
+  
+  // Atalhos globais
+  if(key === 'F11') { e.preventDefault(); goFullscreen(); return; }
+  if(key === 'PrintScreen') { takeScreenshot(); return; }
+  if(e.ctrlKey && key === 'z') { rewindEmulator(); return; }
+  if(key === '+' || key === '=') { 
+    e.preventDefault();
+    const newZoom = Math.min(200, parseInt(activeZoom) + 25);
+    setZoom(newZoom.toString());
+    return;
+  }
+  if(key === '-' || key === '_') {
+    e.preventDefault();
+    const newZoom = Math.max(50, parseInt(activeZoom) - 25);
+    setZoom(newZoom.toString());
+    return;
+  }
+  
+  // Quick save/load F1-F9
+  if(key.startsWith('F') && !e.ctrlKey && !e.shiftKey) {
+    const num = parseInt(key[1]);
+    if(num >= 1 && num <= 9) {
+      e.preventDefault();
+      loadGameFromSlot(num);
+      return;
+    }
+  }
+  if(e.ctrlKey && key.startsWith('F')) {
+    const num = parseInt(key[1]);
+    if(num >= 1 && num <= 9) {
+      e.preventDefault();
+      saveGameToSlot(num);
+      return;
+    }
+  }
+  
+  // Ações mapeadas
+  for(const [action, k] of Object.entries(keybinds)) {
+    if(key === k) {
+      e.preventDefault();
+      if(action === 'pause') togglePauseEmulator();
+      if(action === 'fullscreen') goFullscreen();
+      if(action === 'rewind') rewindEmulator();
+      if(action === 'screenshot') takeScreenshot();
+      break;
+    }
+  }
+});
+
+// ==================== BIBLIOTECA DE ROMS ====================
+function openRomFolder() {
+  document.getElementById('rom-folder-modal').classList.add('open');
+  renderRomList();
+}
+
+function closeRomFolder() {
+  document.getElementById('rom-folder-modal').classList.remove('open');
+}
+
+function filterROMs(query) {
+  const filtered = romLibrary.filter(r => r.name.toLowerCase().includes(query.toLowerCase()));
+  renderRomList(filtered);
+}
+
+function renderRomList(list = romLibrary) {
+  const el = document.getElementById('rom-list');
+  if(!el) return;
+  
+  if(list.length === 0) {
+    el.innerHTML = '<div class="rom-empty">Nenhuma ROM encontrada. Selecione uma pasta acima.</div>';
+    return;
+  }
+  
+  el.innerHTML = list.map((rom, i) => `
+    <div class="rom-item" onclick="playRomFromLibrary(${i})">
+      <span style="font-size:28px">${rom.ext === 'GBA' ? '🎮' : '🟩'}</span>
+      <div class="rom-item-info">
+        <div class="rom-item-name">${escapeHtml(rom.name)}</div>
+        <div class="rom-item-meta">${rom.ext} • ${rom.size} MB</div>
+      </div>
+      <button class="rom-item-play" onclick="event.stopPropagation();playRomFromLibrary(${i})">▶ Jogar</button>
+    </div>
+  `).join('');
+}
+
+function playRomFromLibrary(index) {
+  const rom = romLibrary[index];
+  if(rom && rom.file) {
+    closeRomFolder();
+    loadROM(rom.file);
+  }
+}
+
+document.getElementById('folder-input')?.addEventListener('change', (e) => {
+  const files = Array.from(e.target.files);
+  romLibrary = files
+    .filter(f => f.name.match(/\.(gba|gbc|gb)$/i))
+    .map(f => ({
+      file: f,
+      name: f.name.replace(/\.[^.]+$/, ''),
+      size: (f.size / 1024 / 1024).toFixed(2),
+      ext: f.name.split('.').pop().toUpperCase()
+    }));
+  renderRomList();
+});
+
+document.getElementById('rom-input')?.addEventListener('change', (e) => {
+  if(e.target.files[0]) loadROM(e.target.files[0]);
+});
+
+function renderRecentGames() {
+  const el = document.getElementById('recent-games');
+  if(!el) return;
+  
+  if(recentGames.length === 0) {
+    el.innerHTML = '<div class="no-rom-msg">Nenhum jogo recente</div>';
+    return;
+  }
+  
+  el.innerHTML = recentGames.map(game => `
+    <div class="rom-item" style="margin-bottom:6px;cursor:default">
+      <span>🎮</span>
+      <div class="rom-item-info">
+        <div class="rom-item-name">${escapeHtml(game.name)}</div>
+        <div class="rom-item-meta">${new Date(game.date).toLocaleDateString()}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ==================== GAMEPAD ====================
+const gamepadMap = {
+  0: 'x', 1: 'z', 2: 's', 3: 'a', 4: 'a', 5: 's',
+  8: 'Enter', 9: 'Shift', 12: 'ArrowUp', 13: 'ArrowDown',
+  14: 'ArrowLeft', 15: 'ArrowRight'
+};
+const pressedKeys = new Set();
+
+function sendGamepadKey(key, isPressed) {
+  if(isPressed && pressedKeys.has(key)) return;
+  if(!isPressed) pressedKeys.delete(key);
+  else pressedKeys.add(key);
+  
+  document.dispatchEvent(new KeyboardEvent(isPressed ? 'keydown' : 'keyup', {
+    key: key,
+    bubbles: true
+  }));
+}
+
+function pollGamepads() {
+  const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+  
+  for(const gp of gamepads) {
+    if(!gp) continue;
+    
+    // Botões
+    gp.buttons.forEach((button, i) => {
+      const key = gamepadMap[i];
+      if(key && button.pressed) {
+        sendGamepadKey(key, true);
+      } else if(key && !button.pressed && pressedKeys.has(key)) {
+        sendGamepadKey(key, false);
+      }
+    });
+    
+    // Analógicos como direcional
+    const ax = gp.axes[0];
+    const ay = gp.axes[1];
+    const deadzone = 0.3;
+    
+    sendGamepadKey('ArrowLeft', ax < -deadzone);
+    sendGamepadKey('ArrowRight', ax > deadzone);
+    sendGamepadKey('ArrowUp', ay < -deadzone);
+    sendGamepadKey('ArrowDown', ay > deadzone);
+  }
+  
+  requestAnimationFrame(pollGamepads);
+}
+
+function updateGamepadUI() {
+  const gamepads = navigator.getGamepads ? Array.from(navigator.getGamepads()).filter(Boolean) : [];
+  const dot = document.getElementById('gp-dot');
+  const label = document.getElementById('gp-label');
+  const list = document.getElementById('gp-list');
+  
+  if(gamepads.length === 0) {
+    if(dot) dot.className = 'dot';
+    if(label) label.textContent = 'Sem controle';
+    if(list) list.innerHTML = '<div class="no-rom-msg">Nenhum controle detectado</div>';
+    return;
+  }
+  
+  if(dot) dot.className = 'dot on';
+  if(label) label.textContent = `${gamepads.length} controle${gamepads.length > 1 ? 's' : ''}`;
+  if(list) {
+    list.innerHTML = gamepads.map(gp => `
+      <div style="padding:10px;background:var(--surface3);border-radius:10px;margin-bottom:8px">
+        🎮 ${gp.id.slice(0, 40)}<br>
+        <span style="font-size:10px;color:var(--muted2)">${gp.buttons.length} botões • ${gp.axes.length} eixos</span>
+      </div>
+    `).join('');
+  }
+}
+
+window.addEventListener('gamepadconnected', () => {
+  updateGamepadUI();
+  toast('🎮 Controle conectado!');
+});
+window.addEventListener('gamepaddisconnected', () => {
+  updateGamepadUI();
+  toast('🔌 Controle desconectado');
+});
+
+// ==================== FPS COUNTER ====================
+function updateFPS() {
+  frames++;
+  const now = Date.now();
+  if(now - lastFpsTime >= 1000) {
+    if(isRunning && fpsVisible) {
+      document.getElementById('fps-disp').textContent = frames + ' fps';
+    }
+    frames = 0;
+    lastFpsTime = now;
+  }
+  requestAnimationFrame(updateFPS);
+}
+updateFPS();
+
+// ==================== TOUCH CONTROLS ====================
+document.querySelectorAll('[data-key]').forEach(btn => {
+  const key = btn.dataset.key;
+  const fireEvent = (type) => {
+    document.dispatchEvent(new KeyboardEvent(type, { key: key, bubbles: true }));
+  };
+  
+  btn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    fireEvent('keydown');
+  }, { passive: false });
+  
+  btn.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    fireEvent('keyup');
+  }, { passive: false });
+  
+  btn.addEventListener('mousedown', () => fireEvent('keydown'));
+  btn.addEventListener('mouseup', () => fireEvent('keyup'));
+});
+
+// ==================== MODAL ====================
+function openCfg() {
+  buildGrid(SHADERS, 'shader-grid', 'setShader', () => activeShader);
+  buildGrid(FILTERS, 'filter-grid', 'setFilter', () => activeFilter);
+  buildGrid(RATIOS, 'ratio-grid', 'setRatio', () => activeRatio);
+  buildGrid(ZOOMS, 'zoom-grid', 'setZoom', () => activeZoom);
+  buildGrid(ROTATES, 'rotate-grid', 'setRotate', () => activeRotate);
+  renderKeybinds();
+  renderCheats();
+  document.getElementById('cfg-modal').classList.add('open');
+}
+
+function closeCfg() {
+  document.getElementById('cfg-modal').classList.remove('open');
+}
+
+function switchCfgTab(btn) {
+  document.querySelectorAll('.cfg-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.cfg-pane').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById(`pane-${btn.dataset.pane}`).classList.add('active');
+}
+
+// ==================== TOAST ====================
+function toast(message, duration = 2000) {
+  const toastEl = document.getElementById('toast');
+  if(!toastEl) return;
+  
+  toastEl.textContent = message;
+  toastEl.classList.add('show');
+  
+  setTimeout(() => {
+    toastEl.classList.remove('show');
+  }, duration);
+}
+
+// ==================== DRAG & DROP ====================
+const screenArea = document.getElementById('screen-area');
+screenArea.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.add('over');
+});
+screenArea.addEventListener('dragleave', () => {
+  document.getElementById('drop-zone').classList.remove('over');
+});
+screenArea.addEventListener('drop', (e) => {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('over');
+  const file = e.dataTransfer.files[0];
+  if(file && file.name.match(/\.(gba|gbc|gb)$/i)) {
+    loadROM(file);
+  } else {
+    toast('⚠️ Por favor, selecione um arquivo .gba, .gbc ou .gb');
+  }
+});
+
+// ==================== INICIALIZAÇÃO ====================
+function loadPreferences() {
+  // Carregar keybinds
+  const savedKeybinds = localStorage.getItem('gba_keybinds');
+  if(savedKeybinds) {
+    try {
+      keybinds = JSON.parse(savedKeybinds);
+    } catch(e) {}
+  }
+  renderKeybinds();
+  
+  // Carregar configurações de vídeo
+  const shader = localStorage.getItem('gba_shader');
+  if(shader) setShader(shader);
+  const filter = localStorage.getItem('gba_filter');
+  if(filter) setFilter(filter);
+  const ratio = localStorage.getItem('gba_ratio');
+  if(ratio) setRatio(ratio);
+  const zoom = localStorage.getItem('gba_zoom');
+  if(zoom) setZoom(zoom);
+  const rotate = localStorage.getItem('gba_rotate');
+  if(rotate) setRotate(rotate);
+  
+  // Carregar toggles
+  if(localStorage.getItem('gba_resizable') === '1') {
+    document.getElementById('tog-resize')?.classList.add('on');
+    document.getElementById('screen-area').classList.add('resizable');
+  }
+  if(localStorage.getItem('gba_pixel') === '0') {
+    document.getElementById('tog-pixel')?.classList.remove('on');
+  }
+  if(localStorage.getItem('gba_darkmode') === '0') {
+    document.getElementById('tog-dark')?.classList.remove('on');
+  } else {
+    document.body.classList.remove('light');
+  }
+  if(localStorage.getItem('gba_touch') === '1') {
+    document.getElementById('tog-touch')?.classList.add('on');
+    document.querySelector('.touch-zone').style.display = 'block';
+  }
+  if(localStorage.getItem('gba_fps') === '0') {
+    document.getElementById('tog-fps')?.classList.remove('on');
+    fpsVisible = false;
+    document.querySelector('.pill:has(#fps-disp)').style.display = 'none';
+  }
+  
+  // Carregar áudio
+  const volume = localStorage.getItem('gba_volume');
+  if(volume) {
+    document.getElementById('vol').value = volume;
+    setVolume(volume);
+  }
+  const bass = localStorage.getItem('gba_bass');
+  if(bass) document.getElementById('bass').value = bass;
+  const treble = localStorage.getItem('gba_treble');
+  if(treble) document.getElementById('treble').value = treble;
+  updateEqualizer();
+  
+  if(localStorage.getItem('gba_mute') === '1') {
+    document.getElementById('tog-mute')?.classList.add('on');
+    isMuted = true;
+  }
+  
+  // Carregar auto-save
+  const autosave = localStorage.getItem('gba_autosave');
+  if(autosave === '1') {
+    document.getElementById('tog-autosave')?.classList.add('on');
+    autosaveEnabled = true;
+  }
+  const autosaveInterval = localStorage.getItem('gba_autosave_interval');
+  if(autosaveInterval) {
+    document.getElementById('autosave-interval').value = autosaveInterval;
+    updateAutosaveInterval();
+  }
+  
+  // Carregar cheats
+  const savedCheats = localStorage.getItem('gba_cheats');
+  if(savedCheats) {
+    try {
+      cheats = JSON.parse(savedCheats);
+      renderCheats();
+    } catch(e) {}
+  }
+  
+  renderRecentGames();
+}
+
+function saveCheats() {
+  localStorage.setItem('gba_cheats', JSON.stringify(cheats));
+}
+
+// Salvar cheats periodicamente
+setInterval(saveCheats, 5000);
+
+// Inicializar
+window.addEventListener('DOMContentLoaded', () => {
+  loadPreferences();
+  pollGamepads();
+  updateGamepadUI();
+  setupAudioEqualizer();
+  toast('🎮 Emulador GBA pronto! Carregue uma ROM para começar.');
+
+  // ==================== INTEGRAÇÃO ELECTRON ====================
+  if (window.electronAPI) {
+    console.log('[Electron] Modo nativo ativado');
+
+    // Redirecionar botão "Abrir ROM" para o diálogo nativo do Windows
+    const romInput = document.getElementById('rom-input');
+    const openRomBtn = document.querySelector('button[onclick*="rom-input"]');
+
+    // Sobrescrever a função de abrir arquivo para usar diálogo nativo
+    window.openNativeFile = async function() {
+      const result = await window.electronAPI.openFileDialog();
+      if (!result) return;
+      // Converter base64 de volta para File
+      const byteChars = atob(result.base64);
+      const byteNums = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([byteNums]);
+      const file = new File([blob], result.fileName);
+      loadROM(file);
+    };
+
+    // Interceptar cliques no input de arquivo escondido
+    if (romInput) {
+      romInput.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        window.openNativeFile();
+      }, true);
+    }
+
+    // Patch na função takeScreenshot para usar diálogo nativo do Windows
+    const _origScreenshot = window.takeScreenshot;
+    window.takeScreenshot = async function() {
+      const canvas = document.querySelector('#game canvas');
+      if (!canvas) { toast('Aguarde o jogo iniciar'); return; }
+      const dataUrl = canvas.toDataURL('image/png');
+      const saved = await window.electronAPI.saveScreenshot(dataUrl, currentRomName);
+      if (saved) toast('📸 Screenshot salva!');
+    };
+
+    // Receber ações do menu nativo do Windows
+    window.electronAPI.onMenuAction((action) => {
+      switch(action) {
+        case 'toggle-pause': togglePauseEmulator(); break;
+        case 'reset':
+          if (emulator && emulator.reset) { emulator.reset(); toast('🔄 Resetado'); }
+          break;
+        case 'speed-0.5': setEmulatorSpeed(0.5); break;
+        case 'speed-1':   setEmulatorSpeed(1); break;
+        case 'speed-2':   setEmulatorSpeed(2); break;
+        case 'speed-4':   setEmulatorSpeed(4); break;
+        case 'toggle-mute':
+          const muteBtn = document.getElementById('tog-mute');
+          if (muteBtn) toggleMute(muteBtn);
+          break;
+        case 'enter-fullscreen':
+          document.body.classList.add('fullscreen-mode');
+          break;
+        case 'exit-fullscreen':
+          document.body.classList.remove('fullscreen-mode');
+          break;
+        case 'screenshot': window.takeScreenshot(); break;
+        case 'open-settings': openCfg(); break;
+        case 'save-state-1': saveGameToSlot(1); break;
+        case 'load-state-1': loadGameFromSlot(1); break;
+      }
+    });
+
+    // Receber ROM carregada via menu Arquivo > Abrir ROM
+    window.electronAPI.onLoadRomFile(({ base64, fileName }) => {
+      const byteChars = atob(base64);
+      const byteNums = new Uint8Array(byteChars.length);
+      for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+      const blob = new Blob([byteNums]);
+      const file = new File([blob], fileName);
+      loadROM(file);
+    });
+
+    // Mostrar indicador de modo nativo no cabeçalho
+    const logoEl = document.querySelector('.logo');
+    if (logoEl) {
+      const badge = document.createElement('span');
+      badge.textContent = 'Windows App';
+      badge.style.cssText = 'font-size:9px;background:var(--accent);padding:1px 6px;border-radius:8px;opacity:0.8;';
+      logoEl.appendChild(badge);
+    }
+  }
+});
+</script>
+</body>
+</html>
