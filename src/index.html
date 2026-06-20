@@ -497,6 +497,19 @@ input[type=range]::-webkit-slider-thumb {
   transition: all 0.15s;
 }
 .rom-item:hover { background: var(--accent-lo); transform: translateX(2px); }
+.rom-cover-wrap {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: var(--surface2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.rom-cover-img { width: 100%; height: 100%; object-fit: cover; }
+.rom-cover-fallback { font-size: 28px; }
 .rom-item-info { flex: 1; }
 .rom-item-name { font-size: 13px; font-weight: 500; }
 .rom-item-meta { font-size: 11px; color: var(--muted2); }
@@ -1488,7 +1501,9 @@ function renderRomList(list = romLibrary) {
   
   el.innerHTML = list.map((rom, i) => `
     <div class="rom-item" onclick="playRomFromLibrary(${i})">
-      <span style="font-size:28px">${rom.ext === 'GBA' ? '🎮' : '🟩'}</span>
+      <div class="rom-cover-wrap" id="cover-wrap-${i}">
+        <span class="rom-cover-fallback">${rom.ext === 'GBA' ? '🎮' : '🟩'}</span>
+      </div>
       <div class="rom-item-info">
         <div class="rom-item-name">${escapeHtml(rom.name)}</div>
         <div class="rom-item-meta">${rom.ext} • ${rom.size} MB</div>
@@ -1496,6 +1511,19 @@ function renderRomList(list = romLibrary) {
       <button class="rom-item-play" onclick="event.stopPropagation();playRomFromLibrary(${i})">▶ Jogar</button>
     </div>
   `).join('');
+
+  // Buscar capas em segundo plano (não trava a lista)
+  if (window.electronAPI && window.electronAPI.getGameCover) {
+    list.forEach((rom, i) => {
+      window.electronAPI.getGameCover(rom.name).then((coverUrl) => {
+        if (!coverUrl) return;
+        const wrap = document.getElementById(`cover-wrap-${i}`);
+        if (wrap) {
+          wrap.innerHTML = `<img src="${coverUrl}" class="rom-cover-img" loading="lazy">`;
+        }
+      }).catch(() => {});
+    });
+  }
 }
 
 async function playRomFromLibrary(index) {
