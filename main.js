@@ -28,39 +28,53 @@ function coverPathFor(romName) {
   return path.join(coversDir, safeName + '.jpg');
 }
 
-// Busca a capa na internet (TheGamesDB via proxy publico de busca) e salva em cache
+// Busca a capa na internet usando o repositório publico libretro-thumbnails
+// (mesma fonte usada pelo RetroArch, gratuita e sem necessidade de chave)
 async function fetchCoverForGame(romName) {
   const cached = coverPathFor(romName);
   if (fs.existsSync(cached)) {
     return 'file://' + cached.replace(/\\/g, '/');
   }
 
-  try {
-    // Limpa o nome (remove tags tipo (Brazil), [!], etc.) para melhorar a busca
-    const cleanName = romName
-      .replace(/[\(\[].*?[\)\]]/g, '')
-      .replace(/[_\-]/g, ' ')
-      .trim();
+  const baseUrl = 'https://thumbnails.libretro.com/Nintendo%20-%20Game%20Boy%20Advance/Named_Boxarts/';
 
-    // Usa a API publica do RAWG (sem precisar de chave para busca simples) como fonte de capas
-    const searchUrl = 'https://api.rawg.io/api/games?search=' + encodeURIComponent(cleanName) + '&page_size=1';
-    const searchRes = await fetch(searchUrl);
-    if (!searchRes.ok) return null;
-    const data = await searchRes.json();
-
-    const imageUrl = data?.results?.[0]?.background_image;
-    if (!imageUrl) return null;
-
-    const imgRes = await fetch(imageUrl);
-    if (!imgRes.ok) return null;
-    const buffer = Buffer.from(await imgRes.arrayBuffer());
-    fs.writeFileSync(cached, buffer);
-
-    return 'file://' + cached.replace(/\\/g, '/');
-  } catch (e) {
-    console.error('Erro ao buscar capa:', e);
-    return null;
+  // Gera variações plausiveis do nome para tentar encontrar a capa certa
+  function buildCandidates(name) {
+    const noTags = name.replace(/[\(\[].*?[\)\]]/g, '').trim();
+    const candidates = [name];
+    // Tenta adicionar regioes comuns se o nome nao tiver nenhuma tag
+    if (noTags === name) {
+      candidates.push(name + ' (USA)');
+      candidates.push(name + ' (Europe)');
+      candidates.push(name + ' (World)');
+      candidates.push(name + ' (Japan)');
+    } else {
+      candidates.push(noTags + ' (USA)');
+      candidates.push(noTags + ' (Europe)');
+    }
+    return candidates;
   }
+
+  const candidates = buildCandidates(romName);
+
+  for (const candidate of candidates) {
+    try {
+      const url = baseUrl + encodeURIComponent(candidate.replace(/\s+/g, ' ')) + '.png';
+      const res = await fetch(url);
+      if (res.ok) {
+        const buffer = Buffer.from(await res.arrayBuffer());
+        // Verifica se nao e uma pagina de erro disfarcada (muito pequena)
+        if (buffer.length > 500) {
+          fs.writeFileSync(cached, buffer);
+          return 'file://' + cached.replace(/\\/g, '/');
+        }
+      }
+    } catch (e) {
+      // tenta o proximo candidato
+    }
+  }
+
+  return null;
 }
 
 function scanRomFolder(folderPath) {
