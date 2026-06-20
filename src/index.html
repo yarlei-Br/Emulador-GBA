@@ -730,10 +730,10 @@ input[type=file] { display: none; }
   <div class="modal-box">
     <div class="modal-head"><span>📁 Biblioteca de ROMs</span><button class="modal-close" onclick="closeRomFolder()">✕</button></div>
     <div class="modal-body">
-      <div class="folder-drop" onclick="document.getElementById('folder-input').click()">
+      <div class="folder-drop" id="folder-drop-area" onclick="changeRomFolder()">
         <input type="file" id="folder-input" webkitdirectory multiple>
         <div style="font-size:32px;margin-bottom:8px">📂</div>
-        <div>Clique para selecionar uma pasta de ROMs</div>
+        <div id="folder-drop-text">Clique para selecionar uma pasta de ROMs</div>
         <div style="font-size:11px;margin-top:6px">.gba, .gbc, .gb</div>
       </div>
       <input class="rom-search" id="rom-search" placeholder="🔍 Buscar ROM…" oninput="filterROMs(this.value)">
@@ -1418,9 +1418,54 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ==================== BIBLIOTECA DE ROMS ====================
-function openRomFolder() {
+async function openRomFolder() {
   document.getElementById('rom-folder-modal').classList.add('open');
+
+  // No app Windows (Electron), usa pasta nativa lembrada — não pergunta de novo
+  if (window.electronAPI) {
+    const saved = await window.electronAPI.getSavedRomFolder();
+    if (saved && saved.roms) {
+      setNativeRomLibrary(saved.roms);
+      return;
+    }
+    // Primeira vez: pede a pasta e já carrega
+    const chosen = await window.electronAPI.chooseRomFolder();
+    if (chosen && chosen.roms) {
+      setNativeRomLibrary(chosen.roms);
+      toast('📁 Pasta de jogos salva! Não vai perguntar de novo.');
+    } else {
+      renderRomList();
+    }
+    return;
+  }
+
   renderRomList();
+}
+
+// Converte a lista de ROMs lidas pelo Electron (com caminho no disco)
+// para o formato que a biblioteca usa, e renderiza
+function setNativeRomLibrary(roms) {
+  romLibrary = roms.map(r => ({
+    name: r.name,
+    size: r.size,
+    ext: r.ext,
+    fullPath: r.fullPath,
+    file: null // será lido sob demanda ao clicar em "Jogar"
+  }));
+  renderRomList();
+}
+
+// Botão para trocar a pasta manualmente (dentro do modal da biblioteca)
+async function changeRomFolder() {
+  if (!window.electronAPI) {
+    document.getElementById('folder-input').click();
+    return;
+  }
+  const chosen = await window.electronAPI.chooseRomFolder();
+  if (chosen && chosen.roms) {
+    setNativeRomLibrary(chosen.roms);
+    toast('📁 Pasta atualizada!');
+  }
 }
 
 function closeRomFolder() {
@@ -1437,7 +1482,7 @@ function renderRomList(list = romLibrary) {
   if(!el) return;
   
   if(list.length === 0) {
-    el.innerHTML = '<div class="rom-empty">Nenhuma ROM encontrada. Selecione uma pasta acima.</div>';
+    el.innerHTML = '<div class="rom-empty">Nenhuma ROM encontrada nessa pasta.<br>Use o botão acima para escolher a pasta dos seus jogos.</div>';
     return;
   }
   
@@ -1453,9 +1498,29 @@ function renderRomList(list = romLibrary) {
   `).join('');
 }
 
-function playRomFromLibrary(index) {
+async function playRomFromLibrary(index) {
   const rom = romLibrary[index];
-  if(rom && rom.file) {
+  if (!rom) return;
+
+  // ROM nativa do Electron: precisa ler o conteúdo do disco primeiro
+  if (rom.fullPath && !rom.file) {
+    closeRomFolder();
+    toast('⏳ Carregando ' + rom.name + '...');
+    const result = await window.electronAPI.readRomFile(rom.fullPath);
+    if (!result) {
+      toast('❌ Não foi possível abrir o arquivo');
+      return;
+    }
+    const byteChars = atob(result.base64);
+    const byteNums = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) byteNums[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([byteNums]);
+    const file = new File([blob], result.fileName);
+    loadROM(file);
+    return;
+  }
+
+  if (rom.file) {
     closeRomFolder();
     loadROM(rom.file);
   }
@@ -1851,6 +1916,28 @@ window.addEventListener('DOMContentLoaded', () => {
       const blob = new Blob([byteNums]);
       const file = new File([blob], fileName);
       loadROM(file);
+    });
+
+    // Receber biblioteca atualizada via menu "Trocar pasta da Biblioteca"
+    window.electronAPI.onRomLibraryLoaded(({ folderPath, roms }) => {
+      setNativeRomLibrary(roms);
+      updateFolderDropText(folderPath);
+      toast('📁 Pasta atualizada!');
+    });
+
+    // Atualiza o texto do botão "Trocar pasta" mostrando o caminho atual
+    function updateFolderDropText(folderPath) {
+      const txt = document.getElementById('folder-drop-text');
+      if (txt && folderPath) {
+        txt.textContent = '📁 ' + folderPath + ' (clique para trocar)';
+      }
+    }
+
+    // Ao iniciar: se já existe pasta salva, mostra o caminho dela no modal
+    window.electronAPI.getSavedRomFolder().then((saved) => {
+      if (saved && saved.folderPath) {
+        updateFolderDropText(saved.folderPath);
+      }
     });
 
     // Mostrar indicador de modo nativo no cabeçalho
