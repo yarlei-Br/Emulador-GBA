@@ -510,6 +510,19 @@ input[type=range]::-webkit-slider-thumb {
 }
 .rom-cover-img { width: 100%; height: 100%; object-fit: cover; }
 .rom-cover-fallback { font-size: 28px; }
+.rom-cover-wrap { position: relative; cursor: pointer; }
+.rom-cover-edit-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0,0,0,0.55);
+  opacity: 0;
+  transition: opacity 0.15s;
+  font-size: 16px;
+}
+.rom-cover-wrap:hover .rom-cover-edit-hint { opacity: 1; }
 .rom-item-info { flex: 1; }
 .rom-item-name { font-size: 13px; font-weight: 500; }
 .rom-item-meta { font-size: 11px; color: var(--muted2); }
@@ -1468,6 +1481,26 @@ function setNativeRomLibrary(roms) {
   renderRomList();
 }
 
+// Permite ao usuário escolher manualmente uma imagem para usar como capa
+async function setCoverManually(index) {
+  if (!window.electronAPI || !window.electronAPI.setGameCoverManual) {
+    toast('Disponível apenas no app Windows');
+    return;
+  }
+  const rom = romLibrary[index];
+  if (!rom) return;
+
+  const coverUrl = await window.electronAPI.setGameCoverManual(rom.name);
+  if (coverUrl) {
+    const wrap = document.getElementById(`cover-wrap-${index}`);
+    if (wrap) {
+      wrap.innerHTML = `<img src="${coverUrl}" class="rom-cover-img" loading="lazy">`;
+    }
+    toast('🖼️ Capa atualizada!');
+  }
+}
+
+
 // Botão para trocar a pasta manualmente (dentro do modal da biblioteca)
 async function changeRomFolder() {
   if (!window.electronAPI) {
@@ -1501,8 +1534,9 @@ function renderRomList(list = romLibrary) {
   
   el.innerHTML = list.map((rom, i) => `
     <div class="rom-item" onclick="playRomFromLibrary(${i})">
-      <div class="rom-cover-wrap" id="cover-wrap-${i}">
+      <div class="rom-cover-wrap" id="cover-wrap-${i}" onclick="event.stopPropagation();setCoverManually(${i})" title="Clique para trocar a capa">
         <span class="rom-cover-fallback">${rom.ext === 'GBA' ? '🎮' : '🟩'}</span>
+        <div class="rom-cover-edit-hint">🖼️</div>
       </div>
       <div class="rom-item-info">
         <div class="rom-item-name">${escapeHtml(rom.name)}</div>
