@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Ler o conteúdo de um arquivo de ROM específico pelo caminho completo
   readRomFile: (fullPath) => ipcRenderer.invoke('read-rom-file', fullPath),
 
+  // Buscar (ou pegar do cache) a capa de um jogo pela internet
+  getGameCover: (romName) => ipcRenderer.invoke('get-game-cover', romName),
+
   // Salvar screenshot
   saveScreenshot: (dataUrl, romName) => ipcRenderer.invoke('save-screenshot', { dataUrl, romName }),
 
