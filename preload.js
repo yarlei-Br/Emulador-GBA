@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Buscar (ou pegar do cache) a capa de um jogo pela internet
   getGameCover: (romName) => ipcRenderer.invoke('get-game-cover', romName),
 
+  // Escolher uma imagem manualmente para usar como capa
+  setGameCoverManual: (romName) => ipcRenderer.invoke('set-game-cover-manual', romName),
+
   // Salvar screenshot
   saveScreenshot: (dataUrl, romName) => ipcRenderer.invoke('save-screenshot', { dataUrl, romName }),
 
