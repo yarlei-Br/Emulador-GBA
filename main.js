@@ -370,6 +370,30 @@ ipcMain.handle('get-game-cover', async (event, romName) => {
   return await fetchCoverForGame(romName);
 });
 
+// Deixar o usuario escolher uma imagem manualmente como capa do jogo
+ipcMain.handle('set-game-cover-manual', async (event, romName) => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Escolher capa do jogo',
+    filters: [
+      { name: 'Imagens', extensions: ['png', 'jpg', 'jpeg', 'webp'] }
+    ],
+    properties: ['openFile']
+  });
+
+  if (result.canceled || result.filePaths.length === 0) return null;
+
+  const sourcePath = result.filePaths[0];
+  const cached = coverPathFor(romName);
+
+  try {
+    const buffer = fs.readFileSync(sourcePath);
+    fs.writeFileSync(cached, buffer);
+    return 'file://' + cached.replace(/\\/g, '/') + '?t=' + Date.now();
+  } catch (e) {
+    return null;
+  }
+});
+
 // Ler o conteúdo de um arquivo de ROM específico (para tocar)
 ipcMain.handle('read-rom-file', async (event, fullPath) => {
   try {
