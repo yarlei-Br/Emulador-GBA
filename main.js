@@ -4,6 +4,48 @@ const fs = require('fs');
 
 let mainWindow;
 
+// Onde fica salva a config persistente (pasta de jogos lembrada)
+const configPath = path.join(app.getPath('userData'), 'config.json');
+
+function loadConfig() {
+  try {
+    return JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+  } catch (e) {
+    return {};
+  }
+}
+
+function saveConfig(config) {
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+}
+
+function scanRomFolder(folderPath) {
+  const exts = ['.gba', '.gbc', '.gb'];
+  let results = [];
+  try {
+    const entries = fs.readdirSync(folderPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile()) {
+        const ext = path.extname(entry.name).toLowerCase();
+        if (exts.includes(ext)) {
+          const fullPath = path.join(folderPath, entry.name);
+          const stat = fs.statSync(fullPath);
+          results.push({
+            name: entry.name.replace(/\.[^.]+$/, ''),
+            fileName: entry.name,
+            fullPath: fullPath,
+            size: (stat.size / 1024 / 1024).toFixed(2),
+            ext: ext.replace('.', '').toUpperCase()
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.error('Erro ao ler pasta de ROMs:', e);
+  }
+  return results;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -24,12 +66,10 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
 
-  // Mostrar janela quando estiver pronta (evita flash branco)
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
   });
 
-  // Abrir links externos no navegador padrão
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
@@ -66,6 +106,23 @@ function buildMenu() {
               const base64 = fileData.toString('base64');
               const fileName = path.basename(filePath);
               mainWindow.webContents.send('load-rom-file', { base64, fileName });
+            }
+          }
+        },
+        {
+          label: '📁 Trocar pasta da Biblioteca...',
+          click: async () => {
+            const result = await dialog.showOpenDialog(mainWindow, {
+              title: 'Selecionar pasta de ROMs',
+              properties: ['openDirectory']
+            });
+            if (!result.canceled && result.filePaths.length > 0) {
+              const folderPath = result.filePaths[0];
+              const config = loadConfig();
+              config.romFolder = folderPath;
+              saveConfig(config);
+              const roms = scanRomFolder(folderPath);
+              mainWindow.webContents.send('rom-library-loaded', { folderPath, roms });
             }
           }
         },
@@ -202,7 +259,7 @@ function buildMenu() {
   Menu.setApplicationMenu(menu);
 }
 
-// Receber pedido de diálogo de arquivo da página (via preload)
+// Abrir diálogo de arquivo único (botão "Abrir ROM" da toolbar)
 ipcMain.handle('open-file-dialog', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Selecionar ROM GBA',
@@ -221,6 +278,46 @@ ipcMain.handle('open-file-dialog', async () => {
     base64: fileData.toString('base64'),
     fileName: path.basename(filePath)
   };
+});
+
+// Pedir pasta de biblioteca (primeira vez OU "trocar pasta")
+ipcMain.handle('choose-rom-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: 'Selecionar pasta de ROMs',
+    properties: ['openDirectory']
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+
+  const folderPath = result.filePaths[0];
+  const config = loadConfig();
+  config.romFolder = folderPath;
+  saveConfig(config);
+
+  return { folderPath, roms: scanRomFolder(folderPath) };
+});
+
+// Obter a pasta já salva (e os jogos dela) sem perguntar nada
+ipcMain.handle('get-saved-rom-folder', async () => {
+  const config = loadConfig();
+  if (!config.romFolder) return null;
+
+  // Verifica se a pasta ainda existe (pode ter sido movida/apagada)
+  if (!fs.existsSync(config.romFolder)) return null;
+
+  return { folderPath: config.romFolder, roms: scanRomFolder(config.romFolder) };
+});
+
+// Ler o conteúdo de um arquivo de ROM específico (para tocar)
+ipcMain.handle('read-rom-file', async (event, fullPath) => {
+  try {
+    const fileData = fs.readFileSync(fullPath);
+    return {
+      base64: fileData.toString('base64'),
+      fileName: path.basename(fullPath)
+    };
+  } catch (e) {
+    return null;
+  }
 });
 
 // Salvar screenshot em disco
