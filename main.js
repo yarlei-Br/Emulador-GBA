@@ -19,6 +19,50 @@ function saveConfig(config) {
   fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
 }
 
+// Pasta onde ficam as capas baixadas (cache local, não precisa buscar de novo)
+const coversDir = path.join(app.getPath('userData'), 'covers');
+if (!fs.existsSync(coversDir)) fs.mkdirSync(coversDir, { recursive: true });
+
+function coverPathFor(romName) {
+  const safeName = romName.replace(/[\\/:*?"<>|]/g, '_');
+  return path.join(coversDir, safeName + '.jpg');
+}
+
+// Busca a capa na internet (TheGamesDB via proxy publico de busca) e salva em cache
+async function fetchCoverForGame(romName) {
+  const cached = coverPathFor(romName);
+  if (fs.existsSync(cached)) {
+    return 'file://' + cached.replace(/\\/g, '/');
+  }
+
+  try {
+    // Limpa o nome (remove tags tipo (Brazil), [!], etc.) para melhorar a busca
+    const cleanName = romName
+      .replace(/[\(\[].*?[\)\]]/g, '')
+      .replace(/[_\-]/g, ' ')
+      .trim();
+
+    // Usa a API publica do RAWG (sem precisar de chave para busca simples) como fonte de capas
+    const searchUrl = 'https://api.rawg.io/api/games?search=' + encodeURIComponent(cleanName) + '&page_size=1';
+    const searchRes = await fetch(searchUrl);
+    if (!searchRes.ok) return null;
+    const data = await searchRes.json();
+
+    const imageUrl = data?.results?.[0]?.background_image;
+    if (!imageUrl) return null;
+
+    const imgRes = await fetch(imageUrl);
+    if (!imgRes.ok) return null;
+    const buffer = Buffer.from(await imgRes.arrayBuffer());
+    fs.writeFileSync(cached, buffer);
+
+    return 'file://' + cached.replace(/\\/g, '/');
+  } catch (e) {
+    console.error('Erro ao buscar capa:', e);
+    return null;
+  }
+}
+
 function scanRomFolder(folderPath) {
   const exts = ['.gba', '.gbc', '.gb'];
   let results = [];
@@ -305,6 +349,11 @@ ipcMain.handle('get-saved-rom-folder', async () => {
   if (!fs.existsSync(config.romFolder)) return null;
 
   return { folderPath: config.romFolder, roms: scanRomFolder(config.romFolder) };
+});
+
+// Buscar (ou pegar do cache) a capa de um jogo
+ipcMain.handle('get-game-cover', async (event, romName) => {
+  return await fetchCoverForGame(romName);
 });
 
 // Ler o conteúdo de um arquivo de ROM específico (para tocar)
