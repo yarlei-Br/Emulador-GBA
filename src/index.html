@@ -1137,17 +1137,32 @@ function applyVideoSettings() {
   }
 }
 
+// ── SCREENSHOT CORRIGIDO ────────────────────────────────────────────
+// No Electron: salva direto em Imagens, sem diálogo, com nome único.
+// No navegador: download tradicional.
 function takeScreenshot() {
   const canvas = document.querySelector('#game canvas');
-  if(!canvas) {
-    toast('Aguarde o jogo iniciar');
+  if (!canvas) { toast('Aguarde o jogo iniciar'); return; }
+
+  // Modo navegador (sem Electron): download tradicional
+  if (!window.electronAPI) {
+    const link = document.createElement('a');
+    link.download = `screenshot_${currentRomName}_${Date.now()}.png`;
+    link.href = canvas.toDataURL();
+    link.click();
+    toast('📸 Screenshot salva!');
     return;
   }
-  const link = document.createElement('a');
-  link.download = `screenshot_${currentRomName}_${Date.now()}.png`;
-  link.href = canvas.toDataURL();
-  link.click();
-  toast('📸 Screenshot salva!');
+
+  // Modo Electron: salva direto em Imagens, sem diálogo
+  const dataUrl = canvas.toDataURL('image/png');
+  window.electronAPI.saveScreenshot(dataUrl, currentRomName).then((res) => {
+    if (res && res.ok) {
+      toast('📸 Salvo em: ' + res.path);
+    } else {
+      toast('❌ Erro ao salvar screenshot: ' + (res && res.error));
+    }
+  });
 }
 
 function goFullscreen() {
@@ -1243,20 +1258,37 @@ function toggleAutosave(el) {
   localStorage.setItem('gba_autosave', autosaveEnabled ? '1' : '0');
 }
 
-function exportAllSaves() {
+// ── EXPORTAR SAVES CORRIGIDO ────────────────────────────────────────
+// No Electron: salva direto em Documentos, sem diálogo.
+// No navegador: download tradicional.
+async function exportAllSaves() {
   const saves = [];
-  for(let i = 0; i < localStorage.length; i++) {
+  for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
-    if(key && key.startsWith('gba_save_')) {
+    if (key && key.startsWith('gba_save_')) {
       saves.push({ key, data: localStorage.getItem(key) });
     }
   }
-  
-  const exportData = JSON.stringify(saves);
-  const blob = new Blob([exportData], {type: 'application/json'});
+
+  const exportData = JSON.stringify(saves, null, 2);
+  const defaultName = `gba_saves_backup_${Date.now()}.json`;
+
+  // Modo Electron: salva direto em Documentos
+  if (window.electronAPI && window.electronAPI.saveSavesBackup) {
+    const res = await window.electronAPI.saveSavesBackup(exportData, defaultName);
+    if (res && res.ok) {
+      toast('📦 Saves exportados em: ' + res.path);
+    } else {
+      toast('❌ Erro ao exportar: ' + (res && res.error));
+    }
+    return;
+  }
+
+  // Modo navegador: download tradicional
+  const blob = new Blob([exportData], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `gba_saves_backup_${Date.now()}.json`;
+  a.download = defaultName;
   a.click();
   toast('📦 Saves exportados!');
 }
@@ -1337,7 +1369,7 @@ function renderCheats() {
 }
 
 function escapeHtml(str) {
-  return str.replace(/[&<>]/g, function(m) {
+  return String(str).replace(/[&<>]/g, function(m) {
     if(m === '&') return '&amp;';
     if(m === '<') return '&lt;';
     if(m === '>') return '&gt;';
@@ -1499,7 +1531,6 @@ async function setCoverManually(index) {
     toast('🖼️ Capa atualizada!');
   }
 }
-
 
 // Botão para trocar a pasta manualmente (dentro do modal da biblioteca)
 async function changeRomFolder() {
@@ -1908,7 +1939,6 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // Redirecionar botão "Abrir ROM" para o diálogo nativo do Windows
     const romInput = document.getElementById('rom-input');
-    const openRomBtn = document.querySelector('button[onclick*="rom-input"]');
 
     // Sobrescrever a função de abrir arquivo para usar diálogo nativo
     window.openNativeFile = async function() {
@@ -1932,22 +1962,12 @@ window.addEventListener('DOMContentLoaded', () => {
       }, true);
     }
 
-    // Patch na função takeScreenshot para usar diálogo nativo do Windows
-    const _origScreenshot = window.takeScreenshot;
-    window.takeScreenshot = async function() {
-      const canvas = document.querySelector('#game canvas');
-      if (!canvas) { toast('Aguarde o jogo iniciar'); return; }
-      const dataUrl = canvas.toDataURL('image/png');
-      const saved = await window.electronAPI.saveScreenshot(dataUrl, currentRomName);
-      if (saved) toast('📸 Screenshot salva!');
-    };
-
     // Receber ações do menu nativo do Windows
     window.electronAPI.onMenuAction((action) => {
       switch(action) {
         case 'toggle-pause': togglePauseEmulator(); break;
         case 'reset':
-          if (emulator && emulator.reset) { emulator.reset(); toast('🔄 Resetado'); }
+          if (isRunning && emulator && emulator.restart) { emulator.restart(); toast('🔄 Resetado'); }
           break;
         case 'speed-0.5': setEmulatorSpeed(0.5); break;
         case 'speed-1':   setEmulatorSpeed(1); break;
@@ -1963,7 +1983,7 @@ window.addEventListener('DOMContentLoaded', () => {
         case 'exit-fullscreen':
           document.body.classList.remove('fullscreen-mode');
           break;
-        case 'screenshot': window.takeScreenshot(); break;
+        case 'screenshot': takeScreenshot(); break;
         case 'open-settings': openCfg(); break;
         case 'save-state-1': saveGameToSlot(1); break;
         case 'load-state-1': loadGameFromSlot(1); break;
