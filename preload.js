@@ -1,38 +1,31 @@
-const { contextBridge, ipcRenderer } = require('electron');
+async function exportAllSaves() {
+  const saves = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('gba_save_')) {
+      saves.push({ key, data: localStorage.getItem(key) });
+    }
+  }
 
-contextBridge.exposeInMainWorld('electronAPI', {
-  // Abrir diálogo de arquivo único
-  openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
+  const exportData = JSON.stringify(saves, null, 2);
+  const defaultName = `gba_saves_backup_${Date.now()}.json`;
 
-  // Escolher pasta de ROMs (abre diálogo nativo e salva a escolha)
-  chooseRomFolder: () => ipcRenderer.invoke('choose-rom-folder'),
+  // Modo Electron: salva direto em Documentos
+  if (window.electronAPI && window.electronAPI.saveSavesBackup) {
+    const res = await window.electronAPI.saveSavesBackup(exportData, defaultName);
+    if (res && res.ok) {
+      toast('📦 Saves exportados em: ' + res.path);
+    } else {
+      toast('❌ Erro ao exportar: ' + (res && res.error));
+    }
+    return;
+  }
 
-  // Pega a pasta já salva anteriormente, sem perguntar nada
-  getSavedRomFolder: () => ipcRenderer.invoke('get-saved-rom-folder'),
-
-  // Ler o conteúdo de um arquivo de ROM específico pelo caminho completo
-  readRomFile: (fullPath) => ipcRenderer.invoke('read-rom-file', fullPath),
-
-  // Buscar (ou pegar do cache) a capa de um jogo pela internet
-  getGameCover: (romName) => ipcRenderer.invoke('get-game-cover', romName),
-
-  // Escolher uma imagem manualmente para usar como capa
-  setGameCoverManual: (romName) => ipcRenderer.invoke('set-game-cover-manual', romName),
-
-  // Salvar screenshot
-  saveScreenshot: (dataUrl, romName) => ipcRenderer.invoke('save-screenshot', { dataUrl, romName }),
-
-  // Receber ações do menu nativo
-  onMenuAction: (callback) => ipcRenderer.on('menu-action', (event, action) => callback(action)),
-
-  // Receber ROM carregada via menu
-  onLoadRomFile: (callback) => ipcRenderer.on('load-rom-file', (event, data) => callback(data)),
-
-  // Receber biblioteca recarregada via menu "Trocar pasta"
-  onRomLibraryLoaded: (callback) => ipcRenderer.on('rom-library-loaded', (event, data) => callback(data)),
-
-  removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
-
-  platform: process.platform,
-  isElectron: true
-});
+  // Modo navegador: download tradicional
+  const blob = new Blob([exportData], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = defaultName;
+  a.click();
+  toast('📦 Saves exportados!');
+}
