@@ -1,11 +1,14 @@
 // main.js — GBA Emulator Ultimate
-// Correções: save sem conflito de nome, screenshot direto, sem diálogo bloqueante.
+// Agora com servidor HTTP local para o IndexedDB (save interno do jogo) funcionar.
 
 const { app, BrowserWindow, Menu, dialog, shell, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 
 let mainWindow;
+let server;
+let serverPort = 0;
 
 // ── Config persistente ──────────────────────────────────────────────
 const configPath = path.join(app.getPath('userData'), 'config.json');
@@ -86,8 +89,70 @@ function scanRomFolder(folderPath) {
   return results;
 }
 
+// ── Servidor HTTP local (resolve o IndexedDB / save interno) ────────
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js':   'application/javascript; charset=utf-8',
+  '.css':  'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png':  'image/png',
+  '.jpg':  'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg':  'image/svg+xml',
+  '.ico':  'image/x-icon',
+  '.wasm': 'application/wasm',
+};
+
+function startLocalServer() {
+  return new Promise((resolve) => {
+    const srcDir = path.join(__dirname, 'src');
+
+    server = http.createServer((req, res) => {
+      try {
+        // Só serve arquivos de dentro de src/
+        let urlPath = decodeURIComponent(req.url.split('?')[0]);
+        if (urlPath === '/') urlPath = '/index.html';
+
+        const filePath = path.join(srcDir, urlPath);
+        const normalized = path.normalize(filePath);
+        if (!normalized.startsWith(srcDir)) {
+          res.writeHead(403); res.end('Forbidden'); return;
+        }
+
+        fs.readFile(normalized, (err, data) => {
+          if (err) { res.writeHead(404); res.end('Not found'); return; }
+          const ext = path.extname(normalized).toLowerCase();
+          res.writeHead(200, {
+            'Content-Type': MIME[ext] || 'application/octet-stream',
+            'Cache-Control': 'no-store'
+          });
+          res.end(data);
+        });
+      } catch (e) {
+        res.writeHead(500); res.end('Server error');
+      }
+    });
+
+    // Porta 0 = o sistema escolhe uma porta livre automaticamente
+    server.listen(0, '127.0.0.1', () => {
+      serverPort = server.address().port;
+      console.log('[Servidor local] http://127.0.0.1:' + serverPort);
+      resolve(serverPort);
+    });
+  });
+}
+
+function stopLocalServer() {
+  if (server) {
+    try { server.close(); } catch (e) {}
+    server = null;
+  }
+}
+
 // ── Janela ──────────────────────────────────────────────────────────
-function createWindow() {
+async function createWindow() {
+  await startLocalServer();
+
   mainWindow = new BrowserWindow({
     width: 1280, height: 800, minWidth: 800, minHeight: 600,
     title: 'GBA Emulator Ultimate',
@@ -102,7 +167,9 @@ function createWindow() {
     }
   });
 
-  mainWindow.loadFile(path.join(__dirname, 'src', 'index.html'));
+  // ⚠️ Agora carrega via HTTP, não via file://
+  mainWindow.loadURL(`http://127.0.0.1:${serverPort}/`);
+
   mainWindow.once('ready-to-show', () => mainWindow.show());
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -225,7 +292,7 @@ function buildMenu() {
         { label: 'Sobre', click: () => {
             dialog.showMessageBox(mainWindow, {
               type: 'info', title: 'Sobre GBA Emulator Ultimate', message: 'GBA Emulator Ultimate',
-              detail: 'Versão 1.1.0\n\nEmulador Game Boy Advance completo.\nSuporta ROMs .gba, .gbc e .gb\n\nPowered by Electron',
+              detail: 'Versão 1.2.0\n\nEmulador Game Boy Advance completo.\nSuporta ROMs .gba, .gbc e .gb\n\nPowered by Electron',
               icon: path.join(__dirname, 'assets', 'icon.ico'), buttons: ['OK']
             });
         }}
@@ -233,7 +300,6 @@ function buildMenu() {
     }
   ];
 
-  Menu.buildFromTemplate(template);
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
@@ -297,16 +363,13 @@ ipcMain.handle('read-rom-file', async (event, fullPath) => {
   } catch (e) { return null; }
 });
 
-// ── SCREENSHOT: salva direto, sem diálogo, sobrescreve se existir ───
 ipcMain.handle('save-screenshot', async (event, { dataUrl, romName }) => {
   try {
     const picturesPath = app.getPath('pictures');
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const defaultName = `GBA_${romName || 'screenshot'}_${timestamp}.png`;
     const filePath = path.join(picturesPath, defaultName);
-
     const base64Data = dataUrl.replace(/^data:image\/png;base64,/, '');
-    // 'w' sobrescreve se existir — mas o timestamp já torna o nome único
     fs.writeFileSync(filePath, base64Data, 'base64');
     return { ok: true, path: filePath };
   } catch (e) {
@@ -314,7 +377,6 @@ ipcMain.handle('save-screenshot', async (event, { dataUrl, romName }) => {
   }
 });
 
-// ── EXPORTAR SAVES: salva direto em Documentos, sem diálogo ─────────
 ipcMain.handle('save-saves-backup', async (event, { json, defaultName }) => {
   try {
     const docsPath = app.getPath('documents');
@@ -335,5 +397,6 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  stopLocalServer();
   if (process.platform !== 'darwin') app.quit();
 });
