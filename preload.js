@@ -1,31 +1,29 @@
-async function exportAllSaves() {
-  const saves = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith('gba_save_')) {
-      saves.push({ key, data: localStorage.getItem(key) });
-    }
-  }
+// preload.js — bridge segura entre Electron e a página HTML
+const { contextBridge, ipcRenderer } = require('electron');
 
-  const exportData = JSON.stringify(saves, null, 2);
-  const defaultName = `gba_saves_backup_${Date.now()}.json`;
+contextBridge.exposeInMainWorld('electronAPI', {
+  // Diálogos de arquivo / pasta
+  openFileDialog: () => ipcRenderer.invoke('open-file-dialog'),
+  chooseRomFolder: () => ipcRenderer.invoke('choose-rom-folder'),
+  getSavedRomFolder: () => ipcRenderer.invoke('get-saved-rom-folder'),
 
-  // Modo Electron: salva direto em Documentos
-  if (window.electronAPI && window.electronAPI.saveSavesBackup) {
-    const res = await window.electronAPI.saveSavesBackup(exportData, defaultName);
-    if (res && res.ok) {
-      toast('📦 Saves exportados em: ' + res.path);
-    } else {
-      toast('❌ Erro ao exportar: ' + (res && res.error));
-    }
-    return;
-  }
+  // ROMs
+  readRomFile: (fullPath) => ipcRenderer.invoke('read-rom-file', fullPath),
 
-  // Modo navegador: download tradicional
-  const blob = new Blob([exportData], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = defaultName;
-  a.click();
-  toast('📦 Saves exportados!');
-}
+  // Capas
+  getGameCover: (romName) => ipcRenderer.invoke('get-game-cover', romName),
+  setGameCoverManual: (romName) => ipcRenderer.invoke('set-game-cover-manual', romName),
+
+  // Screenshot — agora retorna { ok, path } e salva direto
+  saveScreenshot: (dataUrl, romName) =>
+    ipcRenderer.invoke('save-screenshot', { dataUrl, romName }),
+
+  // Exportar saves — salva direto em Documentos, sem diálogo
+  saveSavesBackup: (json, defaultName) =>
+    ipcRenderer.invoke('save-saves-backup', { json, defaultName }),
+
+  // Eventos do menu nativo
+  onMenuAction: (cb) => ipcRenderer.on('menu-action', (e, a) => cb(a)),
+  onLoadRomFile: (cb) => ipcRenderer.on('load-rom-file', (e, d) => cb(d)),
+  onRomLibraryLoaded: (cb) => ipcRenderer.on('rom-library-loaded', (e, d) => cb(d)),
+});
